@@ -130,7 +130,54 @@ Notes:
   does not exist in any commit.
 - Two-factor authentication may prompt on publish. Have the authenticator ready.
 
-## 3. Submit to the plugin market
+## 3. Publish later versions from CI
+
+Once the package exists on npm, every later version is published by
+`.github/workflows/publish.yml`. No npm token is stored in the repository.
+
+One-time binding, after step 2 has put the first version on the registry:
+
+1. On npmjs.com open the package → **Settings → Trusted Publisher** and add a
+   GitHub Actions publisher: owner `SeveNOlogy7`, repository `oh-my-dsh`,
+   workflow file `publish.yml`.
+2. Nothing else. The workflow's publish job holds `id-token: write`, so its
+   runner requests an OIDC token and npm exchanges it for a short-lived publish
+   credential.
+
+Releasing a version:
+
+```
+# bump and document
+npm version patch --no-git-tag-version      # or edit package.json by hand
+$EDITOR CHANGELOG.md
+git add -A && git commit -m "release: 0.1.1"
+git push origin main
+
+# tag it — this is what triggers the publish
+git tag v0.1.1
+git push origin v0.1.1
+```
+
+The workflow refuses to publish unless the tag equals `package.json`'s version
+and `private` is gone, and it runs `node scripts/check.mjs`,
+`node scripts/generate-presets.mjs --check`, `node --test tests/` and
+`npm pack --dry-run` first. It publishes with `--provenance`, so the npm page
+shows an attestation linking the tarball to this repository and commit, then it
+opens a GitHub release for the tag.
+
+`workflow_dispatch` runs the same gates plus `npm publish --dry-run` without
+publishing; use it to rehearse a release.
+
+### If you prefer a token
+
+A granular access token works too and needs no npm-side binding: add it as the
+repository secret `NPM_TOKEN`, restore `registry-url: 'https://registry.npmjs.org'`
+on `actions/setup-node` in the publish job, and set
+`NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}` on the publish step. Trusted
+publishing is preferred: a token is a long-lived credential that has to be
+rotated and revoked, while the OIDC exchange is per run.
+
+## 4. Submit to the plugin market
 
 The DSH plugin market is the `awesome-dsh-plugin/awesome-dsh-plugin`
 repository. Submission is a pull request that adds **exactly one** new file
@@ -209,7 +256,10 @@ A PR for a plugin that is not on npm is rejected or left unlisted.
 - [ ] `npm test` and `npm run check` pass, and `npm run check:presets` exits
       `0` with no `out of date` line.
 - [ ] Working tree clean, on `main`.
-- [ ] `npm publish --access public` succeeded and `npm view` confirms it.
-- [ ] `v<version>` tag pushed.
+- [ ] `npm publish --access public` succeeded and `npm view` confirms it — the
+      first version only; later versions are published by CI.
+- [ ] Trusted Publisher on npmjs.com names this repository and `publish.yml`.
+- [ ] `v<version>` tag pushed and the publish workflow finished green.
+- [ ] The npm page shows the provenance attestation for the published version.
 - [ ] Market PR adds exactly `data/plugins/SeveNOlogy7__oh-my-dsh.yml`.
 - [ ] No README in the market repository was hand-edited.

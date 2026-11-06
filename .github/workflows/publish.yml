@@ -1,0 +1,102 @@
+name: publish
+
+# Publishes this package to npm when a version tag is pushed.
+#
+# The gates run before the publish, and the tag must equal `package.json`'s
+# version, so a tag alone can never ship a tree that fails its own checks.
+#
+# Authentication is npm Trusted Publishing (OIDC) — the job requests an OIDC
+# token and npm exchanges it for a short-lived publish credential. No npm token
+# is stored in this repository. That requires a one-time binding on npmjs.com:
+# the package's Settings → Trusted Publisher must name this repository and
+# `publish.yml`. A package cannot be bound before it exists, so the very first
+# version is published by hand; see docs/releasing.md.
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      dry-run:
+        description: Run the gates and `npm publish --dry-run` without publishing
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+  id-token: write # npm Trusted Publishing and provenance
+
+jobs:
+  verify:
+    name: Verify
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # package.json requires node >=22.13.0, so the gates run on that major.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.x'
+      - name: Tag matches the package version
+        if: startsWith(github.ref, 'refs/tags/')
+        run: |
+          version="$(node -p "require('./package.json').version")"
+          tag="${GITHUB_REF_NAME#v}"
+          echo "package.json: $version / tag: $tag"
+          if [ "$version" != "$tag" ]; then
+            echo "::error::tag $GITHUB_REF_NAME does not match package.json version $version"
+            exit 1
+          fi
+      - name: Refuse a private package
+        run: |
+          node -e "if (require('./package.json').private === true) { console.error('::error::package.json is private; npm publish would be refused'); process.exit(1) }"
+      - name: Static checks, contract, parity, version
+        run: node scripts/check.mjs
+      - name: Preset patches match the generator
+        run: node scripts/generate-presets.mjs --check
+      - name: Tests
+        run: node --test tests/
+      - name: Packed file list
+        run: npm pack --dry-run
+
+  publish:
+    name: Publish
+    needs: verify
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # Trusted Publishing needs npm >= 11.5.1, and Node 22 still ships npm 10.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.x'
+      - run: npm install -g npm@^11.5.1
+      # No registry-url and no NODE_AUTH_TOKEN: npm detects GitHub Actions,
+      # requests the OIDC token this job is granted, and uses it directly.
+      # A token-based alternative is documented in docs/releasing.md.
+      - name: Publish with provenance
+        run: npm publish --access public --provenance
+
+  dry-run:
+    name: Dry run
+    needs: verify
+    if: github.event_name == 'workflow_dispatch' && inputs.dry-run
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.x'
+      - run: npm publish --dry-run --access public
+
+  release:
+    name: GitHub release
+    needs: publish
+    permissions:
+      contents: write
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Create the release for this tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" --generate-notes --verify-tag
