@@ -1,0 +1,19 @@
+# Verification overlay for a temporary headless profile.
+# Inserts the preset registry, selects the OMD Sisyphus preset by default, and
+# restores the desktop credential rows that the headless template disables.
+- insert:
+    - id: agent-preset-registry
+      name: '@deepseek-ai/dsh-agent-preset-registry'
+      config:
+        default: omd-sisyphus
+- id: agent-default-model
+  config:
+    provider: deepseek-account
+    model: deepseek-flash
+    reasoningEffort: high
+- id: credentials
+  disabled: false
+- id: authorization
+  disabled: false
+- id: deepseek-account
+  disabled: false

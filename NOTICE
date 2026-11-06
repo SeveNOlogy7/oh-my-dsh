@@ -1,0 +1,36 @@
+# NOTICE
+
+Oh-My-DSH is an independent, clean-room capability port. It does not contain
+source code or verbatim prompt text from the upstream project.
+
+## Upstream capability reference
+
+- Project: oh-my-openagent (also published as oh-my-opencode)
+- Repository: https://github.com/code-yeongyu/oh-my-openagent
+- Reference tag: v4.19.4
+- Reference commit: b072d279110bdda2c6ac2525d0d24dc54d16148a
+- License: Sustainable Use License 1.0 (SUL-1.0), a non-OSI license
+- License text: https://github.com/code-yeongyu/oh-my-openagent/blob/dev/LICENSE.md
+
+The upstream license permits use and modification for internal business,
+non-commercial, or personal purposes, and distribution only free of charge for
+non-commercial purposes. Oh-My-DSH does not redistribute upstream code. Its
+prompts, skills, protocol documents, and implementation were written from
+observed behavior and the project's public documentation. Attribution here is
+provenance, not a license grant. The license boundary between SUL-1.0 and this
+repository's MIT license is a decision for the project owner; see
+`upstream/omo-sources.lock.json` for the evidence and its stated coverage gaps.
+
+## Porting reference
+
+- Project: OhMyZcode
+- Repository: https://github.com/djt889/OhMyZcode
+- License: MIT
+- Use: architectural lessons (zero-intrusion defaults, per-session state slots,
+  atomic single-writer state, report-only doctor, dual-evidence acceptance).
+  No OhMyZcode code is copied.
+
+## Third-party runtime dependencies
+
+None. Oh-My-DSH uses only Node.js built-in modules and DeepSeek Harness
+services available at runtime.

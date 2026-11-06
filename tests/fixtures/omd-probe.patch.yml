@@ -1,0 +1,3 @@
+- insert:
+    - id: omd-probe
+      name: 'omd-probe'

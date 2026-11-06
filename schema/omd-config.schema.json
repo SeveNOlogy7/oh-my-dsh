@@ -1,0 +1,163 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://oh-my-dsh.dev/schema/omd-config.schema.json",
+  "title": "Oh-My-DSH configuration",
+  "type": "object",
+  "additionalProperties": true,
+  "properties": {
+    "$schema": { "type": "string" },
+    "keywordHook": { "type": "boolean", "default": true },
+    "keywords": {
+      "type": "object",
+      "properties": {
+        "ultrawork": { "type": "boolean", "default": true },
+        "team": { "type": "boolean", "default": true },
+        "hyperplan": { "type": "boolean", "default": true }
+      },
+      "additionalProperties": false
+    },
+    "agents": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "provider": { "type": ["string", "null"] },
+          "model": { "type": ["string", "null"] },
+          "modelRef": { "type": ["string", "null"] },
+          "reasoningEffort": { "type": ["string", "null"] },
+          "temperature": { "type": ["number", "null"], "minimum": 0, "maximum": 2 },
+          "maxTokens": { "type": ["integer", "null"], "minimum": 1 },
+          "promptAppend": { "type": "string" },
+          "readOnly": { "type": ["boolean", "null"] },
+          "canDelegate": { "type": ["boolean", "null"] },
+          "allowedSubagents": { "type": "array", "items": { "type": "string" } }
+        },
+        "additionalProperties": true
+      }
+    },
+    "categories": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "description": { "type": "string" },
+          "modelRef": { "type": ["string", "null"] },
+          "provider": { "type": ["string", "null"] },
+          "model": { "type": ["string", "null"] },
+          "reasoningEffort": { "type": ["string", "null"] },
+          "maxTokens": { "type": ["integer", "null"], "minimum": 1 },
+          "promptAppend": { "type": "string" },
+          "disabled": { "type": "boolean" }
+        },
+        "additionalProperties": true
+      }
+    },
+    "models": {
+      "type": "object",
+      "properties": {
+        "catalog": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "properties": {
+              "provider": { "type": "string" },
+              "model": { "type": "string" },
+              "reasoningEffort": { "type": "string" },
+              "temperature": { "type": "number" },
+              "maxTokens": { "type": "integer" }
+            },
+            "required": ["provider", "model"],
+            "additionalProperties": false
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "delegation": {
+      "type": "object",
+      "properties": {
+        "maxConcurrent": { "type": "integer", "minimum": 1, "default": 5 },
+        "maxDepth": { "type": "integer", "minimum": 0, "default": 1 },
+        "defaultBackground": { "type": "boolean", "default": false },
+        "waitTimeoutMs": { "type": "integer", "minimum": 1, "default": 600000 },
+        "pollMs": { "type": "integer", "minimum": 1, "default": 30000 }
+      },
+      "additionalProperties": false
+    },
+    "taskSystem": {
+      "type": "object",
+      "properties": { "enabled": { "type": "boolean", "default": false } },
+      "additionalProperties": false
+    },
+    "ultrawork": {
+      "type": "object",
+      "properties": {
+        "requirePlanGate": { "type": "boolean", "default": true },
+        "dualEvidence": { "type": "boolean", "default": true },
+        "maxWaves": { "type": "integer", "minimum": 1, "default": 8 },
+        "maxContinuationRounds": { "type": "integer", "minimum": 1, "default": 20 }
+      },
+      "additionalProperties": false
+    },
+    "review": {
+      "type": "object",
+      "properties": {
+        "maxRounds": { "type": "integer", "minimum": 1, "default": 2 },
+        "highAccuracyDefault": { "type": "boolean", "default": false }
+      },
+      "additionalProperties": false
+    },
+    "hooks": {
+      "type": "object",
+      "properties": {
+        "todoContinuation": { "type": "boolean", "default": true },
+        "commentChecker": { "type": "string", "enum": ["off", "warn", "block"], "default": "warn" },
+        "rulesInjection": { "type": "boolean", "default": true },
+        "prometheusGuard": { "type": "boolean", "default": true },
+        "notepadGuard": { "type": "boolean", "default": true },
+        "planValidator": { "type": "boolean", "default": true },
+        "modelRouting": { "type": "boolean", "default": true }
+      },
+      "additionalProperties": false
+    },
+    "disabledHooks": { "type": "array", "items": { "type": "string" } },
+    "rules": {
+      "type": "object",
+      "properties": {
+        "paths": { "type": "array", "items": { "type": "string" } },
+        "maxBytes": { "type": "integer", "minimum": 1, "default": 65536 }
+      },
+      "additionalProperties": false
+    },
+    "skills": {
+      "type": "object",
+      "properties": { "paths": { "type": "array", "items": { "type": "string" } } },
+      "additionalProperties": false
+    },
+    "diagnostics": {
+      "type": "object",
+      "properties": {
+        "commands": {
+          "type": "array",
+          "items": {
+            "oneOf": [
+              { "type": "string" },
+              {
+                "type": "object",
+                "properties": {
+                  "command": { "type": "string" },
+                  "args": { "type": "array", "items": { "type": "string" } },
+                  "glob": { "type": "string" }
+                },
+                "required": ["command"],
+                "additionalProperties": false
+              }
+            ]
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "telemetry": { "type": "boolean", "default": false }
+  }
+}

@@ -1,0 +1,122 @@
+{
+  "$schema_note": "Provenance lock for Oh-My-DSH. This file records concepts and license evidence only; it never stores upstream code or prompt text.",
+  "source": "code-yeongyu/oh-my-openagent",
+  "url": "https://github.com/code-yeongyu/oh-my-openagent.git",
+  "reference": {
+    "kind": "tag",
+    "tag": "v4.19.4",
+    "commit": "b072d279110bdda2c6ac2525d0d24dc54d16148a",
+    "verified_at": "2026-11-04",
+    "verified_via": "GitHub git refs API + root package.json at the tag",
+    "root_package_version": "4.19.4",
+    "note": "The dev branch is now 5.x and is not the reference. mass ulw is a 5.x tagline and is out of scope for this alignment."
+  },
+  "license": {
+    "omo": {
+      "spdx": "LicenseRef-SUL-1.0",
+      "name": "Sustainable Use License 1.0",
+      "status": "verified",
+      "verified_at": "2026-11-04",
+      "verified_via": "GitHub repository license metadata + LICENSE.md",
+      "github_metadata": {
+        "license_name": "Other",
+        "spdx_id": "NOASSERTION"
+      },
+      "key_terms": [
+        "Use or modification is limited to internal business purposes, non-commercial purposes, or personal use.",
+        "Distribution or provision to others is allowed only free of charge for non-commercial purposes.",
+        "Recipients of any part must receive these terms; modified copies must carry a prominent modification notice."
+      ],
+      "boundary_note": "Oh-My-DSH is a clean-room capability port distributed under MIT. The final legal boundary between SUL-1.0 and MIT belongs to the project owner. This file records verified facts and the audit method, not a legal conclusion."
+    }
+  },
+  "ported_concepts": [
+    {
+      "concept": "agent roster and modes",
+      "upstream_paths": [
+        "packages/omo-opencode/src/agents/builtin-agents.ts",
+        "packages/omo-opencode/src/shared/agent-tool-restrictions.ts",
+        "packages/prompts-core/prompts"
+      ],
+      "omd_target": "src/agents, src/agents/prompts, prompts/agents",
+      "port_status": "reimplemented",
+      "port_note": "Eleven roles, their boundaries, and their output contracts are re-expressed as DSH agent presets. Prompt text is newly written."
+    },
+    {
+      "concept": "delegation engine",
+      "upstream_paths": [
+        "packages/omo-opencode/src/tools/delegate-task",
+        "packages/omo-opencode/src/features/background-agent"
+      ],
+      "omd_target": "src/tools/delegate.js, src/state/background.js",
+      "port_status": "reimplemented",
+      "port_note": "Category and named-agent routing, foreground/background, concurrency queue, cancellation and result files are rebuilt over ctx.subagents."
+    },
+    {
+      "concept": "planning and execution protocols",
+      "upstream_paths": [
+        "packages/shared-skills/skills/ulw-plan/SKILL.md",
+        "packages/shared-skills/skills/start-work/SKILL.md",
+        "packages/omo-opencode/src/features/boulder-state"
+      ],
+      "omd_target": "prompts/protocols, src/state/plan.js, src/state/boulder.js",
+      "port_status": "reimplemented",
+      "port_note": "Plan grammar, drafts, boulder slots, ledger and evidence are re-expressed for .omd."
+    },
+    {
+      "concept": "keyword modes",
+      "upstream_paths": [
+        "packages/omo-opencode/src/hooks/keyword-detector"
+      ],
+      "omd_target": "src/hooks/keyword.js, src/hooks/mode.js, prompts/modes",
+      "port_status": "reimplemented",
+      "port_note": "DSH has no message-transform hook; the detector observes committed user messages and a per-agent prompt section carries the mode protocol. mass ulw is not part of 4.19.4."
+    },
+    {
+      "concept": "review and evidence contracts",
+      "upstream_paths": [
+        "packages/shared-skills/skills/review-work/SKILL.md",
+        "packages/omo-opencode/src/features/background-agent"
+      ],
+      "omd_target": "skills/omd-review-work, prompts/agents/momus.md",
+      "port_status": "reimplemented",
+      "port_note": "DoneClaim and AdversarialVerify shapes are documented in .omd schema docs and enforced by the protocols, not copied text."
+    }
+  ],
+  "ignored_host_bound": [
+    {
+      "path": "packages/omo-opencode",
+      "reason": "OpenCode plugin surface, provider model chains, tmux and MCP integration are host-bound."
+    },
+    {
+      "path": "packages/omo-codex",
+      "reason": "Codex CLI plugin surface is not available in DeepSeek Harness."
+    },
+    {
+      "path": "packages/team-core",
+      "reason": "Team Mode is experimental and off by default in 4.19.4; OMD v0.1.0 uses a wave protocol instead."
+    },
+    {
+      "path": "packages/tmux-core",
+      "reason": "tmux panes are replaced by DSH jobs and subagent background tasks."
+    },
+    {
+      "path": "packages/model-core",
+      "reason": "Provider/model chains are host-owned; OMD accepts DSH provider/model ids from .omd/config.jsonc."
+    }
+  ],
+  "overlap_analysis": {
+    "method": "8-gram verbatim overlap against sampled upstream prompt and skill documents",
+    "upstream_sample": "public docs/reference/features.md, docs/guide/orchestration.md, and the ulw-plan / start-work skill pages at v4.19.4",
+    "omd_sample": "prompts/**, skills/**, docs/parity-omo-4.19.4.md",
+    "shared_8grams": null,
+    "status": "pending first audit run",
+    "coverage_gap": "The audit samples public pages, not the full upstream tree; the upstream repository is not vendored.",
+    "tool": "scripts/license-audit.mjs"
+  },
+  "notes": [
+    "Never run git merge upstream/dev. Synchronization is a reviewed concept-level diff.",
+    "Tag and commit are pinned; an unknown tag must fail scripts/check-version.mjs.",
+    "No upstream code, prompt text, or asset is stored in this repository."
+  ]
+}

@@ -1,0 +1,86 @@
+{
+  "name": "oh-my-dsh",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Agent orchestration for DeepSeek Harness, aligned with oh-my-openagent 4.19.4",
+  "keywords": [
+    "deepseek",
+    "deepseek-harness",
+    "dsh",
+    "dsh-plugin",
+    "plugin",
+    "agent",
+    "agents",
+    "orchestration",
+    "agent-presets",
+    "ai-agents"
+  ],
+  "author": "SeveNOlogy7 <jhcai11@foxmail.com>",
+  "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/SeveNOlogy7/oh-my-dsh.git"
+  },
+  "homepage": "https://github.com/SeveNOlogy7/oh-my-dsh#readme",
+  "bugs": {
+    "url": "https://github.com/SeveNOlogy7/oh-my-dsh/issues"
+  },
+  "engines": {
+    "node": ">=22.13.0"
+  },
+  "exports": {
+    ".": "./runtime.js",
+    "./locale/*.json": "./locale/*.json",
+    "./icon": "./icon.svg"
+  },
+  "files": [
+    "runtime.js",
+    "ui",
+    "src",
+    "prompts",
+    "skills",
+    "presets",
+    "schema",
+    "upstream",
+    "docs",
+    "locale/*.json",
+    "icon.svg",
+    "README.md",
+    "README.zh-CN.md",
+    "DESIGN.zh-CN.md",
+    "CHANGELOG.md",
+    "LICENSE",
+    "NOTICE"
+  ],
+  "scripts": {
+    "test": "node --test tests/",
+    "check": "node scripts/check.mjs",
+    "generate:presets": "node scripts/generate-presets.mjs",
+    "check:presets": "node scripts/generate-presets.mjs --check",
+    "check:parity": "node scripts/check-parity.mjs",
+    "check:version": "node scripts/check-version.mjs",
+    "check:license": "node scripts/license-audit.mjs"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": [
+        "./presets/omd-sisyphus.patch.yml",
+        "./presets/omd-hephaestus.patch.yml",
+        "./presets/omd-prometheus.patch.yml",
+        "./presets/omd-atlas.patch.yml",
+        "./presets/omd-oracle.patch.yml",
+        "./presets/omd-librarian.patch.yml",
+        "./presets/omd-explore.patch.yml",
+        "./presets/omd-multimodal-looker.patch.yml",
+        "./presets/omd-metis.patch.yml",
+        "./presets/omd-momus.patch.yml",
+        "./presets/omd-sisyphus-junior.patch.yml",
+        "./presets/omd-ui.patch.yml"
+      ]
+    }
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "license": "MIT"
+}

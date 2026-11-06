@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Oh-My-DSH">
+  <defs>
+    <linearGradient id="omd-g" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#4f8cff"/>
+      <stop offset="1" stop-color="#19c3a8"/>
+    </linearGradient>
+  </defs>
+  <rect x="2" y="2" width="60" height="60" rx="14" fill="#0b1524"/>
+  <path d="M16 20h12v7H16zM36 20h12v7H36zM26 37h12v7H26z" fill="url(#omd-g)"/>
+  <path d="M22 27v4h6v6h8v-6h6v-4" fill="none" stroke="url(#omd-g)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="16" cy="50" r="3" fill="#19c3a8"/>
+  <circle cx="48" cy="50" r="3" fill="#4f8cff"/>
+</svg>

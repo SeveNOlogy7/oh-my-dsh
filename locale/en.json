@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Oh-My-DSH",
+    "description": "Agent orchestration for DeepSeek Harness, aligned with oh-my-openagent 4.19.4: eleven presets, planning, delegation, review, and durable .omd state."
+  }
+}
