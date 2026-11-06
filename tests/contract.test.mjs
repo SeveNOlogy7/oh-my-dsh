@@ -233,12 +233,15 @@ test('the Client asset is a top-level row the Loader scan can resolve', async ()
   assert.match(source, /conversation\.chat\.commandview/)
   // The loader has no JSX step; a stray tag would break the whole bundle.
   assert.ok(!/<[A-Za-z][^>]*>/.test(source), 'client.js must not contain JSX or HTML markup')
-  // One injection returning every registration: a per-key injection loop would
-  // install the same owner callback repeatedly.
-  assert.equal(
-    (source.match(/ctx\.slots\.inject\(/g) ?? []).length,
-    1,
-    'client.js must inject the owner slot exactly once',
+  // One injection per distinct slot key: a per-key injection loop would install
+  // the same owner callback repeatedly, while each additional slot the asset
+  // renders into legitimately needs its own injection. The command cells and the
+  // OMD settings page are the two slots this asset owns.
+  const injectedSlots = [...source.matchAll(/ctx\.slots\.inject\(\s*'([^']+)'/g)].map((match) => match[1])
+  assert.deepEqual(
+    injectedSlots,
+    ['conversation.chat.commandview', 'settings.section'],
+    'client.js must inject each owned slot exactly once',
   )
 
   const commandSource = await read('src/commands/index.js')

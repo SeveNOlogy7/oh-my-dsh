@@ -2,6 +2,23 @@
 
 ## Unreleased
 
+### Added
+
+- A `language` plugin row key (`en` | `zh`, default `en`) that localizes the
+  descriptions the model reads — tool, command, and bundled-skill descriptions —
+  without touching prompt bodies, `SKILL.md` bodies, or any identifier. Set it
+  per preset row in the profile's `cordis.patch.yml`.
+- A settings page, `Settings → Oh-My-DSH`, that reads and writes the session
+  workspace's `.omd/config.jsonc` (`keywordHook`, `delegation`, `taskSystem`,
+  `diagnostics.commands`). Writes validate against
+  `schema/omd-config.schema.json`, preserve comments and trailing commas, and
+  never emit a BOM; a rejected value returns the validator's own message and
+  leaves the file byte-identical. It reaches the preset through the existing
+  preset-scoped `/omd-config` command, so no global command or row was added.
+- `/omd-config` gained a `set <json>` write form beside its report form.
+
+## Unreleased
+
 ### Changed
 
 - The doctor is a skill, not a command. `/omd-doctor` is gone; all eleven roles

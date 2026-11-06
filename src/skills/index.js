@@ -4,13 +4,17 @@ import { parseFrontmatter } from '../core/frontmatter.js'
 import { readTextSafe } from '../core/atomic.js'
 import { skillsFor } from '../agents/registry.js'
 import { loadSkillText } from '../agents/prompts.js'
+import { text } from '../i18n/index.js'
 
-function summaryFrom(name, parsed, file) {
+function summaryFrom(name, parsed, file, language) {
   const data = parsed.data ?? {}
+  const whenToUse = data.whenToUse ?? data['when-to-use']
   return {
     name: data.name ?? name,
-    description: data.description ?? `OMD skill ${name}`,
-    whenToUse: data.whenToUse ?? data['when-to-use'],
+    description: text(language, `skill.${name}.description`, data.description ?? `OMD skill ${name}`),
+    // The SKILL.md body and its English frontmatter stay as authored; only the
+    // summary the model reads is localized.
+    whenToUse: whenToUse ? text(language, `skill.${name}.whenToUse`, whenToUse) : undefined,
     invocation: { modelInvocable: true, userInvocable: true },
     source: 'bundled',
     provider: 'oh-my-dsh',
@@ -50,7 +54,7 @@ export async function createSkills(runtime) {
     const body = parsed.body.trim()
     if (!body) continue
     const filePath = file.pathname.replace(/^\/([A-Za-z]:)/, '$1')
-    skills.push({ ...summaryFrom(name, parsed, filePath), content: body })
+    skills.push({ ...summaryFrom(name, parsed, filePath, runtime.language), content: body })
   }
   return skills
 }

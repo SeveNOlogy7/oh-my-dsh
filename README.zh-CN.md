@@ -96,6 +96,10 @@ doctor 做成**技能**而不是指令：每个 OMD 角色都带 `omd-doctor` �
 `omd_doctor` 工具，因此诊断与修复可以在同一次回答里闭环。详见
 `docs/commands.md` 与 `docs/tools.md`。
 
+`Settings → Oh-My-DSH` 是本 bundle 的设置页：读写当前会话工作区的
+`.omd/config.jsonc`，并展示生效的 `language` 与模型路由分档及其来源。详见
+`docs/configuration.md`。
+
 ## 零侵入
 
 - OMD 工具/命令/Hook/技能只存在于 OMD preset 内。

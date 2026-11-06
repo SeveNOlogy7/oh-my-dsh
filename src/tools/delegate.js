@@ -2,6 +2,7 @@ import { canDelegate, isSubagentAllowed } from '../agents/registry.js'
 import { categorySettings, isPlainObject, routeFor } from '../core/config.js'
 import { isCategory } from '../agents/categories.js'
 import { parseDoneClaim } from '../agents/result.js'
+import { text } from '../i18n/index.js'
 import { textTool, requireAgent, contentText, truncate, agentEnum } from './shared.js'
 
 function skillBlocks(skillTexts) {
@@ -82,11 +83,15 @@ export function createDelegateTools(runtime) {
   const ctx = runtime.ctx
   const registry = runtime.registry
   const tools = []
+  const t = (key, fallback) => text(runtime.language, key, fallback)
 
   tools.push(
     textTool(
       'omd_delegate',
-      'Delegate a task to a named OMD agent or to a category executor. Use background mode for independent work that can run while you continue; read the result with omd_background_output. A completion notice is only a hint.',
+      t(
+        'tool.omd_delegate.description',
+        'Delegate a task to a named OMD agent or to a category executor. Use background mode for independent work that can run while you continue; read the result with omd_background_output. A completion notice is only a hint.',
+      ),
       {
         type: 'object',
         properties: {
@@ -280,7 +285,10 @@ export function createDelegateTools(runtime) {
   tools.push(
     textTool(
       'omd_background_output',
-      'Read a background delegation result. Set block=true to wait for settlement up to timeout_ms. Completion is the persisted result, not a notification.',
+      t(
+        'tool.omd_background_output.description',
+        'Read a background delegation result. Set block=true to wait for settlement up to timeout_ms. Completion is the persisted result, not a notification.',
+      ),
       {
         type: 'object',
         properties: {
@@ -310,7 +318,7 @@ export function createDelegateTools(runtime) {
   tools.push(
     textTool(
       'omd_background_cancel',
-      'Cancel a queued or running background delegation.',
+      t('tool.omd_background_cancel.description', 'Cancel a queued or running background delegation.'),
       {
         type: 'object',
         properties: { task_id: { type: 'string', required: true }, reason: { type: 'string' } },
@@ -333,7 +341,10 @@ export function createDelegateTools(runtime) {
   tools.push(
     textTool(
       'omd_background_list',
-      'List this agent session’s background delegations, including settled tasks loaded from disk.',
+      t(
+        'tool.omd_background_list.description',
+        'List this agent session’s background delegations, including settled tasks loaded from disk.',
+      ),
       { type: 'object', properties: {}, additionalProperties: false },
       async (_args, exec) => {
         const parent = requireAgent(exec)

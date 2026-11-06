@@ -101,6 +101,10 @@ The doctor is a skill rather than a command: every OMD role carries
 `omd-doctor`, and it drives the `omd_doctor` tool so the diagnosis and the
 repair happen in one turn. See `docs/commands.md` and `docs/tools.md`.
 
+`Settings → Oh-My-DSH` is the bundle's settings page: it reads and writes the
+session workspace's `.omd/config.jsonc` and reports the effective language and
+routing tiers with their source. See `docs/configuration.md`.
+
 ## Tools
 
 `omd_delegate`, `omd_background_output`, `omd_background_cancel`,

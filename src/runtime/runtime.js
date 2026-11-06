@@ -9,6 +9,7 @@ import { readMode, writeMode, clearMode } from '../state/modes.js'
 import { appendLedger } from '../state/ledger.js'
 import { backgroundRegistry } from '../state/background.js'
 import { resolveActivePreset } from '../state/active-preset.js'
+import { normalizeLanguage } from '../i18n/index.js'
 import { Scheduler } from './scheduler.js'
 
 export class Runtime {
@@ -18,6 +19,9 @@ export class Runtime {
     this.agentId = config.agent
     if (!AGENTS[this.agentId]) throw new Error(`unknown OMD agent: ${String(config.agent)}`)
     this.definition = AGENTS[this.agentId]
+    // The plugin row's `language` key selects the description language the
+    // model reads. Anything unsupported or absent degrades to English.
+    this.language = normalizeLanguage(config.language)
     this.registry = backgroundRegistry()
     this.scheduler = new Scheduler(5)
     this.states = new Map()

@@ -37,10 +37,14 @@ if (!Array.isArray(patches) || patches.length <= AGENT_IDS.length) {
     }
     const text = await fs.readFile(file, 'utf8')
     const id = AGENT_IDS[index]
+    // The row specifier must track the package name: it resolves from the
+    // profile's node_modules, so a published scoped name would leave a
+    // hard-coded bare name unresolvable and every preset broken.
+    const pluginRow = `name: ${JSON.stringify(pkg.name)}`
     if (!text.includes(`id: preset-${presetIdFor(id)}`)) note(`${relative} does not declare preset-${presetIdFor(id)}`)
-    if (!text.includes('name: "oh-my-dsh"')) note(`${relative} does not mount oh-my-dsh`)
+    if (!text.includes(pluginRow)) note(`${relative} does not mount ${pkg.name}`)
     if (!new RegExp(`agent:\\s*"?${id}"?\\s*$`, 'm').test(text)) note(`${relative} does not set agent: ${id}`)
-    if ((text.match(/name: "oh-my-dsh"/g) ?? []).length !== 1) note(`${relative} must mount exactly one runtime row`)
+    if (text.split(pluginRow).length - 1 !== 1) note(`${relative} must mount exactly one runtime row`)
     // A row naming a module the installed DSH cannot start leaves the preset
     // audited as broken, which hides it from the picker entirely. That subpath
     // was removed from the shipped composition, so it must never come back.

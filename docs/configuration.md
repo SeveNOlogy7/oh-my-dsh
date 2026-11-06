@@ -104,3 +104,44 @@ Always-on rules are injected; glob rules are added when a matching file is read.
 `skills.paths` is reserved for project skill discovery. Built-in OMD skills are
 registered per preset; project `<cwd>/.omd/skills/*/SKILL.md` is discovered by
 the `omd-workspace` provider.
+
+## Language
+
+The plugin row Config key `language` selects the language of the description
+strings the model reads: tool descriptions, slash-command descriptions, and the
+bundled skills' `description` and `whenToUse`. It accepts `en` (default) or
+`zh`; any other value, and a missing key, resolves to `en`. This key is not an
+`.omd/config.jsonc` setting — it is set per preset row in the profile's
+`cordis.patch.yml`:
+
+```yaml
+- id: omd
+  name: "oh-my-dsh"
+  config:
+    agent: "sisyphus"
+    language: "zh"
+```
+
+It is per row, so two presets in one profile can use different languages.
+Changing it restarts the plugin: the Loader must reload the row before the new
+descriptions are registered. Only descriptions change — prompt bodies,
+`SKILL.md` bodies, and preset picker names stay English, and tool, command,
+skill, and parameter names never change.
+
+## Settings page
+
+`Settings → Oh-My-DSH` edits the session workspace's `.omd/config.jsonc` without
+leaving the app. The **Project** section covers `keywordHook`, `delegation`,
+`taskSystem.enabled`, and `diagnostics.commands`; the **Plugin** section reports
+the row's effective `language` and the category routing tiers together with the
+source each value came from, so nothing pretends to save a composition-time
+value.
+
+The page is the bundle's own browser half and reaches the preset through the
+`/omd-config` command, so it needs a live OMD session — with none open it says
+so instead of failing silently. Each read or save appends a `command/run` +
+`command/done` pair to that session's log: a log-only record that never wakes
+the agent. Writes validate against `schema/omd-config.schema.json` first; a
+rejected value returns the validator's own message and leaves the file
+byte-identical.
+

@@ -3,16 +3,21 @@ import { UI_PACKAGE } from '../core/constants.js'
 import { buildStatus, renderStatus } from '../state/status.js'
 import { runDoctor, renderDoctor } from '../state/doctor.js'
 import { appendNotepad } from '../state/notepads.js'
+import { text } from '../i18n/index.js'
 import { requireAgent, textTool, truncate } from './shared.js'
 
 export function createMiscTools(runtime) {
   const ctx = runtime.ctx
   const tools = []
+  const t = (key, fallback) => text(runtime.language, key, fallback)
 
   tools.push(
     textTool(
       'omd_notepad',
-      'Append to an append-only plan notepad (.omd/notepads/<plan>/<section>.md).',
+      t(
+        'tool.omd_notepad.description',
+        'Append to an append-only plan notepad (.omd/notepads/<plan>/<section>.md).',
+      ),
       {
         type: 'object',
         properties: {
@@ -46,7 +51,7 @@ export function createMiscTools(runtime) {
   tools.push(
     textTool(
       'omd_mode',
-      'Read or change the current orchestration mode for this agent.',
+      t('tool.omd_mode.description', 'Read or change the current orchestration mode for this agent.'),
       {
         type: 'object',
         properties: {
@@ -78,7 +83,10 @@ export function createMiscTools(runtime) {
   tools.push(
     textTool(
       'omd_status',
-      'Read a compact orchestration status: mode, boulder, plans, tasks, background work, recent ledger.',
+      t(
+        'tool.omd_status.description',
+        'Read a compact orchestration status: mode, boulder, plans, tasks, background work, recent ledger.',
+      ),
       { type: 'object', properties: {}, additionalProperties: false },
       async (_args, exec) => {
         const parent = requireAgent(exec)
@@ -98,7 +106,10 @@ export function createMiscTools(runtime) {
   tools.push(
     textTool(
       'omd_doctor',
-      'Run report-only Oh-My-DSH diagnostics: required services, preset registration, spawn provider, config and state readability, browser bundle, upstream lock. Returns one PASS/WARN/FAIL line per check with a fix, and never edits anything. The omd-doctor skill tells you how to read and report it.',
+      t(
+        'tool.omd_doctor.description',
+        'Run report-only Oh-My-DSH diagnostics: required services, preset registration, spawn provider, config and state readability, browser bundle, upstream lock. Returns one PASS/WARN/FAIL line per check with a fix, and never edits anything. The omd-doctor skill tells you how to read and report it.',
+      ),
       { type: 'object', properties: {}, additionalProperties: false },
       async (_args, exec) => {
         const parent = requireAgent(exec)
@@ -121,7 +132,10 @@ export function createMiscTools(runtime) {
     tools.push(
       textTool(
         'omd_lsp',
-        'Query the language server for a definition, references, implementation, or hover.',
+        t(
+          'tool.omd_lsp.description',
+          'Query the language server for a definition, references, implementation, or hover.',
+        ),
         {
           type: 'object',
           properties: {
@@ -168,7 +182,10 @@ export function createMiscTools(runtime) {
     tools.push(
       textTool(
         'omd_diagnostics',
-        'Run the diagnostics commands configured in .omd/config.jsonc (diagnostics.commands).',
+        t(
+          'tool.omd_diagnostics.description',
+          'Run the diagnostics commands configured in .omd/config.jsonc (diagnostics.commands).',
+        ),
         {
           type: 'object',
           properties: {
@@ -235,7 +252,10 @@ export function createMiscTools(runtime) {
   tools.push(
     textTool(
       'omd_ui_status',
-      'Report whether the Host composed the Oh-My-DSH browser bundle and which entries the Web boot graph contains. Use this when command output does not appear in the conversation.',
+      t(
+        'tool.omd_ui_status.description',
+        'Report whether the Host composed the Oh-My-DSH browser bundle and which entries the Web boot graph contains. Use this when command output does not appear in the conversation.',
+      ),
       { type: 'object', properties: {}, additionalProperties: false },
       async () => {
         const modules = ctx.get('clientModules')

@@ -1,3 +1,4 @@
+import { text } from '../i18n/index.js'
 import { requireAgent, textTool, truncate } from './shared.js'
 
 function formatEvent(event) {
@@ -32,11 +33,12 @@ function textOf(message) {
 export function createSessionTools(runtime) {
   const ctx = runtime.ctx
   const tools = []
+  const t = (key, fallback) => text(runtime.language, key, fallback)
 
   tools.push(
     textTool(
       'omd_session_list',
-      'List DSH sessions, newest first. Defaults to the current workspace.',
+      t('tool.omd_session_list.description', 'List DSH sessions, newest first. Defaults to the current workspace.'),
       {
         type: 'object',
         properties: {
@@ -80,7 +82,10 @@ export function createSessionTools(runtime) {
   tools.push(
     textTool(
       'omd_session_read',
-      'Read a DSH session transcript, compacted to text, tool calls, and tool results.',
+      t(
+        'tool.omd_session_read.description',
+        'Read a DSH session transcript, compacted to text, tool calls, and tool results.',
+      ),
       {
         type: 'object',
         properties: {
@@ -116,7 +121,10 @@ export function createSessionTools(runtime) {
   tools.push(
     textTool(
       'omd_session_search',
-      'Search DSH session transcripts. If the profile disables full-text search, this returns the exact configuration fix.',
+      t(
+        'tool.omd_session_search.description',
+        'Search DSH session transcripts. If the profile disables full-text search, this returns the exact configuration fix.',
+      ),
       {
         type: 'object',
         properties: {

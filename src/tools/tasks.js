@@ -1,4 +1,5 @@
 import { TaskStore } from '../state/tasks.js'
+import { text } from '../i18n/index.js'
 import { requireAgent, textTool } from './shared.js'
 
 function renderTask(task) {
@@ -15,6 +16,7 @@ function renderTask(task) {
 
 export function createTaskTools(runtime) {
   const tools = []
+  const t = (key, fallback) => text(runtime.language, key, fallback)
   async function storeFor(exec) {
     const parent = requireAgent(exec)
     const state = await runtime.stateFor(parent)
@@ -24,7 +26,7 @@ export function createTaskTools(runtime) {
   tools.push(
     textTool(
       'omd_task_create',
-      'Create a durable task with dependencies in .omd/tasks.',
+      t('tool.omd_task_create.description', 'Create a durable task with dependencies in .omd/tasks.'),
       {
         type: 'object',
         properties: {
@@ -54,7 +56,7 @@ export function createTaskTools(runtime) {
   tools.push(
     textTool(
       'omd_task_get',
-      'Read one durable task.',
+      t('tool.omd_task_get.description', 'Read one durable task.'),
       {
         type: 'object',
         properties: { id: { type: 'string' } },
@@ -73,7 +75,7 @@ export function createTaskTools(runtime) {
   tools.push(
     textTool(
       'omd_task_list',
-      'List durable tasks, optionally filtered by status.',
+      t('tool.omd_task_list.description', 'List durable tasks, optionally filtered by status.'),
       {
         type: 'object',
         properties: {
@@ -93,7 +95,10 @@ export function createTaskTools(runtime) {
   tools.push(
     textTool(
       'omd_task_update',
-      'Update a durable task: status, owner, subject, description, or blockers.',
+      t(
+        'tool.omd_task_update.description',
+        'Update a durable task: status, owner, subject, description, or blockers.',
+      ),
       {
         type: 'object',
         properties: {

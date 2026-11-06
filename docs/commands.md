@@ -6,7 +6,7 @@ Commands are scoped to OMD presets. The harness's own `/goal` stays available.
 |---|---|---|
 | `/omd-init` | — | Creates `.omd/` directories, a commented `config.jsonc`, `.gitignore`, README, and rules README. Never overwrites existing files. |
 | `/omd-status` | — | Text status board. |
-| `/omd-config` | — | Resolved config, source files, diagnostics. |
+| `/omd-config` | `set <json>` | Resolved config, contributing sources, and parse diagnostics. `set <json>` merges a validated patch into the session workspace's `.omd/config.jsonc` and answers with the new state. |
 | `/omd-ulw` | `<goal>` | Sets ultrawork mode and starts a turn with the goal. |
 | `/omd-plan` | `<goal>` | Sets planning mode; interview and draft. |
 | `/omd-hyperplan` | `<goal>` | Sets hyperplan mode; five adversarial lanes. |
@@ -39,6 +39,13 @@ favor of the `omd-doctor` skill: every OMD role carries it, and it drives the
 `omd_doctor` tool. The model runs the check, reads the PASS/WARN/FAIL rows, and
 reports them in the conversation, so a diagnosis and its repair happen in one
 turn instead of the user having to re-prompt after reading a command row.
+
+`/omd-config` is the one command that writes. Its `set <json>` form validates the
+patch against `schema/omd-config.schema.json` before touching the file; a
+rejected value settles as an error result carrying the validator's own message,
+and the file is left byte-identical. The settings page
+(`Settings → Oh-My-DSH`) drives both forms through
+`ctx.remote.commands.execute`, which is why it needs a live OMD session.
 
 Read-only subagent presets expose only `omd-init`, `omd-status`, `omd-config`,
 `omd-handoff`, and `omd-stop-continuation`.

@@ -8,6 +8,17 @@ const HERE = path.dirname(fileURLToPath(import.meta.url))
 const ROOT = path.resolve(HERE, '..')
 const OUT = path.join(ROOT, 'presets')
 
+const pkg = JSON.parse(await fs.readFile(path.join(ROOT, 'package.json'), 'utf8'))
+
+/**
+ * The module specifier a preset row uses to reach this package. It must equal
+ * the published package name: the row resolves from the profile's
+ * `node_modules`, so a published scoped name (`@scope/oh-my-dsh`) would leave a
+ * hard-coded bare name unresolvable and every preset broken. Renaming the
+ * package therefore means regenerating the presets.
+ */
+const PLUGIN_SPECIFIER = pkg.name
+
 function q(value) {
   return JSON.stringify(String(value))
 }
@@ -57,7 +68,7 @@ function baseRows(agent) {
       },
     ],
   })
-  rows.push({ id: 'omd', name: 'oh-my-dsh', config: { agent: agent.id } })
+  rows.push({ id: 'omd', name: PLUGIN_SPECIFIER, config: { agent: agent.id } })
   return rows
 }
 

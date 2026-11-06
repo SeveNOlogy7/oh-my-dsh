@@ -1,7 +1,6 @@
 import path from 'node:path'
 import { promises as fs } from 'node:fs'
 import { ensureDir, exists, writeTextAtomic } from '../core/atomic.js'
-import { loadConfig } from '../core/config.js'
 import { omdPath } from '../core/paths.js'
 import { buildStatus, renderStatus } from '../state/status.js'
 import {
@@ -14,6 +13,9 @@ import { latestPlan, readPlan, listPlans } from '../state/plan.js'
 import { TaskStore } from '../state/tasks.js'
 import { loadProtocol } from '../agents/prompts.js'
 import { appendLedger } from '../state/ledger.js'
+import { createConfigPage, parseConfigInput } from '../config-page/index.js'
+// Aliased: this module already names result-text parameters `text`.
+import { text as localizedText } from '../i18n/index.js'
 
 function success(text) {
   return { kind: 'success', text }
@@ -95,10 +97,16 @@ export function createCommands(runtime) {
   const ctx = runtime.ctx
   const commands = []
   const add = (command) => commands.push(command)
+  const t = (key, fallback) => localizedText(runtime.language, key, fallback)
+  // The settings page is a browser surface with no filesystem access. It calls
+  // this command through `ctx.remote.commands.execute(...)`, so the two forms
+  // below are one operation with two callers: a human typing `/omd-config` and
+  // the page reading or writing the same workspace file.
+  const configPage = createConfigPage()
 
   add({
     name: 'omd-init',
-    description: 'Create the .omd layout and a commented configuration template.',
+    description: t('command.omd-init.description', 'Create the .omd layout and a commented configuration template.'),
     handler: async ({ agent }) => {
       const state = await runtime.stateFor(agent)
       await ensureOmd(state.cwd)
@@ -122,7 +130,7 @@ export function createCommands(runtime) {
 
   add({
     name: 'omd-ulw',
-    description: 'Enter ultrawork mode and pursue the goal until verified.',
+    description: t('command.omd-ulw.description', 'Enter ultrawork mode and pursue the goal until verified.'),
     input: { hint: '<goal>' },
     handler: async ({ agent, rawInput }) => {
       const goal = inputText(rawInput)
@@ -138,7 +146,7 @@ export function createCommands(runtime) {
 
   add({
     name: 'omd-plan',
-    description: 'Enter interview planning mode and produce an approved plan.',
+    description: t('command.omd-plan.description', 'Enter interview planning mode and produce an approved plan.'),
     input: { hint: '<goal>' },
     handler: async ({ agent, rawInput }) => {
       const goal = inputText(rawInput)
@@ -153,7 +161,7 @@ export function createCommands(runtime) {
 
   add({
     name: 'omd-hyperplan',
-    description: 'Run five adversarial planning lanes and produce a stronger plan.',
+    description: t('command.omd-hyperplan.description', 'Run five adversarial planning lanes and produce a stronger plan.'),
     input: { hint: '<goal>' },
     handler: async ({ agent, rawInput }) => {
       const goal = inputText(rawInput)
@@ -167,7 +175,7 @@ export function createCommands(runtime) {
 
   add({
     name: 'omd-team',
-    description: 'Run a lead + parallel worker wave protocol.',
+    description: t('command.omd-team.description', 'Run a lead + parallel worker wave protocol.'),
     input: { hint: '<goal>' },
     handler: async ({ agent, rawInput }) => {
       const goal = inputText(rawInput)
@@ -182,7 +190,10 @@ export function createCommands(runtime) {
 
   add({
     name: 'omd-start-work',
-    description: 'Start or resume execution of an approved plan with the Atlas protocol.',
+    description: t(
+      'command.omd-start-work.description',
+      'Start or resume execution of an approved plan with the Atlas protocol.',
+    ),
     input: { hint: '[plan]' },
     handler: async ({ agent, rawInput }) => {
       const state = await runtime.stateFor(agent)
@@ -228,7 +239,10 @@ export function createCommands(runtime) {
 
   add({
     name: 'omd-stop-continuation',
-    description: 'Stop OMD continuations, pause the boulder, and pause an active goal.',
+    description: t(
+      'command.omd-stop-continuation.description',
+      'Stop OMD continuations, pause the boulder, and pause an active goal.',
+    ),
     handler: async ({ agent }) => {
       const state = await runtime.stateFor(agent)
       await runtime.clearMode(agent)
@@ -252,7 +266,7 @@ export function createCommands(runtime) {
 
   add({
     name: 'omd-handoff',
-    description: 'Write a continuation handoff document for a new session.',
+    description: t('command.omd-handoff.description', 'Write a continuation handoff document for a new session.'),
     handler: async ({ agent }) => {
       const state = await runtime.stateFor(agent)
       await ensureOmd(state.cwd)
@@ -327,7 +341,7 @@ export function createCommands(runtime) {
 
   add({
     name: 'omd-init-deep',
-    description: 'Generate a hierarchical AGENTS.md context tree.',
+    description: t('command.omd-init-deep.description', 'Generate a hierarchical AGENTS.md context tree.'),
     handler: async ({ agent }) => {
       const state = await runtime.stateFor(agent)
       const protocol = await loadProtocol('init-deep')
@@ -338,7 +352,7 @@ export function createCommands(runtime) {
 
   add({
     name: 'omd-refactor',
-    description: 'Refactor a target with behavior-preserving verification.',
+    description: t('command.omd-refactor.description', 'Refactor a target with behavior-preserving verification.'),
     input: { hint: '<target>' },
     handler: async ({ agent, rawInput }) => {
       const target = inputText(rawInput)
@@ -351,7 +365,7 @@ export function createCommands(runtime) {
 
   add({
     name: 'omd-remove-ai-slops',
-    description: 'Remove low-value generated comments and dead noise.',
+    description: t('command.omd-remove-ai-slops.description', 'Remove low-value generated comments and dead noise.'),
     handler: async ({ agent }) => {
       const protocol = await loadProtocol('remove-ai-slops')
       followup(agent, protocol)
@@ -361,7 +375,7 @@ export function createCommands(runtime) {
 
   add({
     name: 'omd-status',
-    description: 'Show the OMD status board.',
+    description: t('command.omd-status.description', 'Show the OMD status board.'),
     handler: async ({ agent }) => {
       const state = await runtime.stateFor(agent)
       const status = await buildStatus({
@@ -376,21 +390,33 @@ export function createCommands(runtime) {
 
   add({
     name: 'omd-config',
-    description: 'Show the resolved OMD configuration and its sources.',
-    handler: async ({ agent }) => {
+    description: t('command.omd-config.description', 'Show the resolved OMD configuration and its sources.'),
+    // The hint advertises the write form. The bare command keeps its original
+    // report; `set <json>` merges a partial patch into the session workspace's
+    // `.omd/config.jsonc`, validates it against `schema/omd-config.schema.json`,
+    // and answers with the new state. The settings page uses both forms.
+    input: { hint: 'set <json>' },
+    handler: async ({ agent, rawInput }) => {
       const state = await runtime.stateFor(agent)
-      const loaded = await loadConfig({ workspace: state.cwd })
-      return report(
-        JSON.stringify(
-          {
-            sources: loaded.sources,
-            diagnostics: loaded.diagnostics,
-            config: loaded.config,
-          },
-          null,
-          2,
-        ),
-      )
+      const parsed = parseConfigInput(rawInput)
+      if (parsed.kind === 'usage') return failure(parsed.message)
+      try {
+        const result =
+          parsed.kind === 'read'
+            ? await configPage.read({ workspace: state.cwd, agentId: runtime.agentId, language: runtime.language })
+            : await configPage.set({
+                workspace: state.cwd,
+                agentId: runtime.agentId,
+                language: runtime.language,
+                patch: parsed.patch,
+              })
+        // A rejected write is an error result, so the page and the chat cell
+        // both show the validator's own message instead of a generic failure.
+        if (result.ok === false) return failure(result.error.message)
+        return report(JSON.stringify(result, null, 2))
+      } catch (error) {
+        return failure(`omd-config failed: ${String(error?.message ?? error)}`)
+      }
     },
   })
 

@@ -1,4 +1,5 @@
 import path from 'node:path'
+import { text } from '../i18n/index.js'
 import { requireAgent, textTool, contentText } from './shared.js'
 
 const MEDIA = {
@@ -23,7 +24,11 @@ export function createLookAtTools(runtime) {
   return [
     textTool(
       'omd_look_at',
-      'Inspect one or more images with the multimodal-looker agent and return its analysis.',
+      text(
+        runtime.language,
+        'tool.omd_look_at.description',
+        'Inspect one or more images with the multimodal-looker agent and return its analysis.',
+      ),
       {
         type: 'object',
         properties: {
