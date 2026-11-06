@@ -9,10 +9,13 @@ Current state at the time of writing:
   <https://github.com/SeveNOlogy7/oh-my-dsh> (default branch `main`).
 - `package.json` still carries `"private": true` on purpose. GitHub-only
   distribution works in that state; npm publishing does not.
-- The bare npm name `oh-my-dsh` is already taken by an unrelated package, so
-  this project must publish under a **scope**, for example
+- The bare npm name `oh-my-dsh` is already taken by an unrelated, unmaintained
+  `0.1.7` package, so this project must publish under a **scope**, for example
   `@your-scope/oh-my-dsh`. The final scope is a human decision; nothing in the
   repository guesses it. Everywhere below, `<scope>` is a placeholder.
+- The preset patches under `presets/` embed this package's module specifier,
+  generated from `package.json`'s `name` by `scripts/generate-presets.mjs`.
+  They must be regenerated in the same commit as the rename; see step 3.
 - `publishConfig.access` is already `"public"`, which is required for a scoped
   package to be publicly installable.
 
@@ -40,7 +43,34 @@ itself must change first.
    npm pkg delete private
    ```
 
-3. Inspect the real tarball contents before publishing. The `files` allow-list
+   Removing `private: true` is mandatory: npm refuses to publish a package
+   marked private. That flag exists only so the GitHub-only phase cannot be
+   published by accident.
+
+3. Regenerate the preset patches. This is a functional step, not a cosmetic
+   one:
+
+   ```
+   npm run generate:presets
+   ```
+
+   The eleven agent-preset rows under `presets/` reach this package through a
+   module specifier, and the generator derives that specifier from
+   `package.json`'s `name`. The specifier is resolved from the profile's
+   `node_modules`, so leaving a stale value after a scoped rename would leave
+   all eleven presets mounting a module that cannot resolve. The bare name is
+   not a safe fallback either: the unrelated, unmaintained `oh-my-dsh` package
+   that occupies that name on npm could be resolved instead. The rename
+   rewrites the twelve patch files under `presets/`; commit them together with
+   the manifest.
+
+   The `private: true` assertion in `scripts/check.mjs` contradicts step 2, so
+   the same release commit updates that assertion. Until it is updated,
+   `npm run check` fails with `package must be private` — that failure is
+   expected after step 2 and must be fixed in the assertion, never by restoring
+   `private`.
+
+4. Inspect the real tarball contents before publishing. The `files` allow-list
    in `package.json` decides what ships:
 
    ```
@@ -52,12 +82,18 @@ itself must change first.
    both READMEs, `CHANGELOG.md`, `LICENSE`, and `NOTICE` are present, and that
    `.omd/`, `node_modules/`, tests, and scripts are absent.
 
-4. Re-run the gates against the renamed manifest:
+5. Re-run the gates against the renamed manifest:
 
    ```
    npm test
    npm run check
+   npm run check:presets
    ```
+
+   `npm run check` must print `check ok: ...`, and `npm run check:presets` must
+   exit `0` with no output. `check:presets` is silent when the committed patches
+   match the generator; it fails with `out of date: <path>` for every patch that
+   does not. `npm test` must be green too.
 
 ## 2. Publish to npm
 
@@ -165,8 +201,13 @@ A PR for a plugin that is not on npm is rejected or left unlisted.
 - [ ] `npm whoami` returns the expected account.
 - [ ] `package.json` has `name: @<scope>/oh-my-dsh` and no `private` field.
 - [ ] `version`, `dsh`, `exports`, and `files` are unchanged by the rename.
+- [ ] `npm run generate:presets` was run and the twelve `presets/` patches are
+      committed with the rename.
+- [ ] The `private: true` assertion in `scripts/check.mjs` was updated in the
+      same commit.
 - [ ] `npm pack --dry-run` shows the intended files only.
-- [ ] `npm test` and `npm run check` pass.
+- [ ] `npm test` and `npm run check` pass, and `npm run check:presets` exits
+      `0` with no `out of date` line.
 - [ ] Working tree clean, on `main`.
 - [ ] `npm publish --access public` succeeded and `npm view` confirms it.
 - [ ] `v<version>` tag pushed.
