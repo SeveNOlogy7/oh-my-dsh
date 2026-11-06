@@ -3,7 +3,7 @@
 ## Automated
 
 ```
-npm test          # node --test tests/
+npm test          # node --test "tests/**/*.test.mjs"
 npm run check     # syntax, manifest, presets, contract, parity, version
 npm run check:presets
 npm run check:parity

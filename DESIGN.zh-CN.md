@@ -132,7 +132,7 @@ user/message → keyword detector（去代码围栏）→ mode.json
 
 ## 8. 测试
 
-- `node --test tests/`：核心状态、配置、计划、boulder、任务、后台、隔离、
+- `npm test`：核心状态、配置、计划、boulder、任务、后台、隔离、
   runtime 工具/命令/Hook/技能（fake ctx）。
 - `scripts/generate-presets.mjs --check`：preset 生成物确定性。
 - `scripts/check.mjs`：manifest、版本、preset 行、必需文件、语法。

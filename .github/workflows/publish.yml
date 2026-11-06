@@ -42,7 +42,7 @@ jobs:
       - name: Preset patches match the generator
         run: node scripts/generate-presets.mjs --check
       - name: Tests
-        run: node --test tests/
+        run: npm test
       - name: Packed file list
         run: npm pack --dry-run
 

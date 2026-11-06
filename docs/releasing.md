@@ -160,7 +160,7 @@ git push origin v0.1.1
 
 The workflow refuses to publish unless the tag equals `package.json`'s version
 and `private` is gone, and it runs `node scripts/check.mjs`,
-`node scripts/generate-presets.mjs --check`, `node --test tests/` and
+`node scripts/generate-presets.mjs --check`, `npm test` and
 `npm pack --dry-run` first. It publishes with `--provenance`, so the npm page
 shows an attestation linking the tarball to this repository and commit, then it
 opens a GitHub release for the tag.
