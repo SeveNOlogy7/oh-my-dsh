@@ -1,5 +1,44 @@
 # Changelog
 
+## 0.1.3 — 2026-11-09
+
+### Changed
+
+- **Breaking:** OMD is no longer confined to its own presets. The runtime row
+  (`@jhcai11/oh-my-dsh`) is declared once at the profile's top level as
+  `omd-runtime`, generated into `presets/omd-runtime.patch.yml`, so its tools,
+  commands, skills, hooks, and durable `.omd/` state exist in every preset —
+  including the shipped `standard`, `ptc`, `minimal`, and `cordis`. The former
+  "zero intrusion" guarantee is retired.
+- The OMD role is resolved per session from the active preset id instead of
+  being pinned by the row's `agent` key: `omd-<role>` is that role, and any
+  other preset gets the capability-only identity — the full orchestration
+  surface, no OMD persona, no role restriction. The persona prompt section is
+  read lazily and the tool restriction is re-applied on
+  `agent-preset/selected`, so a preset picked before the first turn is the role
+  the first turn runs under.
+- `language` is a profile-wide row key now that there is one runtime row. The
+  settings page's copyable override is the runtime row itself rather than a
+  restatement of a preset's nested config.
+- The eleven presets no longer contain a runtime row. They keep their ids, which
+  is now the only thing that names their role.
+- The doctor's `active-preset` check passes for a non-OMD preset and reports the
+  resolved role or the capability-only identity; only a preset that cannot be
+  read at all warns.
+
+### Verified
+
+- `tests/fixtures/omd-probe`, driven through `ctx.agentPresets.select` — the
+  same call the picker makes — records fourteen `omd_*` tools on a `standard`
+  session, and reproduces the historical per-role tool sets for all eleven OMD
+  presets: atlas reads but does not write, oracle/librarian/explore/metis/momus
+  neither write nor delegate, multimodal-looker sees only its allowlist, and
+  sisyphus-junior writes but cannot re-delegate.
+- `omd_look_at` resolves its `attachments`, `subagents`, and `fs` services per
+  call through the Agent context instead of probing them when the row is
+  applied. A top-level row is applied before agent-scoped services exist, so the
+  probe silently dropped the tool; the four delegating roles have it again.
+
 ## 0.1.2 — 2026-11-09
 
 ### Fixed
