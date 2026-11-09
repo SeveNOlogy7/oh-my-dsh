@@ -70,11 +70,28 @@ jobs:
           node -e "if (require('./package.json').private === true) { console.error('::error::package.json is private; npm publish would be refused'); process.exit(1) }"
       # Trusted Publishing needs npm >= 11.5.1, and Node 22 still ships npm 10.
       - run: npm install -g npm@^11.5.1
+      # The first version is published by hand, and a re-run of a release must
+      # not fail on an immutable version, so an existing version skips the
+      # publish and still lets the release job run.
+      - name: Is this version already published?
+        id: published
+        run: |
+          name="$(node -p "require('./package.json').name")"
+          version="$(node -p "require('./package.json').version")"
+          if npm view "$name@$version" version >/dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
       # No registry-url and no NODE_AUTH_TOKEN: npm detects GitHub Actions,
       # requests the OIDC token this job is granted, and uses it directly.
       # A token-based alternative is documented in docs/releasing.md.
       - name: Publish with provenance
+        if: steps.published.outputs.exists == 'false'
         run: npm publish --access public --provenance
+      - name: Already on the registry
+        if: steps.published.outputs.exists == 'true'
+        run: echo "::notice::this version is already published; skipping npm publish"
 
   dry-run:
     name: Dry run
