@@ -26,7 +26,17 @@ dsh plugin --profile <profile> add E:\Oh-My-DSH
 ## Verify rows
 
 `plugin_manager list_bundles` shows `@jhcai11/oh-my-dsh` with eleven rows
-`preset-omd-*`. `Config.listConfigs` filtered by
+`preset-omd-*` plus the profile-level runtime row, which the generated
+`presets/omd-runtime.patch.yml` declares:
+
+```yaml
+- insert:
+    - id: omd-runtime
+      name: "@jhcai11/oh-my-dsh"
+```
+
+That single row is what makes OMD available in every preset; it is no longer
+declared inside each OMD preset. `Config.listConfigs` filtered by
 `@deepseek-ai/dsh-agent-preset` shows the same eleven preset entries.
 
 The desktop profile is managed by Electron, so `dsh --profile desktop
@@ -69,10 +79,20 @@ boulder, and the handoff file is written. Delegation smoke:
 Expected: a `bg_*` task id, `omd_background_output` returns the child output,
 and `.omd/background/<task_id>.json` exists.
 
-## Zero-intrusion check
+## Capability check
 
-Start a **standard** preset session. It must have no `omd_*` tools, no
-`/omd-*` commands, and no `.omd/` directory created by OMD.
+The runtime row is mounted once at profile level, so OMD is present in every
+preset. Start a **standard** preset session and expect the reverse of the
+retired zero-intrusion check: the `omd_*` tools, the `/omd-*` commands, the
+`omd-*` skills, and the keyword→mode hook are available, and `.omd/` can be
+written. Because `standard` is not an `omd-<role>` preset, that session resolves
+to **capability-only**: orchestration is available, no OMD persona prompt is
+injected, and no OMD role restriction is applied.
+
+The exact tool list a capability-only session sees, and the wording any doctor
+or status row uses for that state, are to be verified by the probe. The mount
+probe recorded in [verification.md](<verification.md>) covers the eleven OMD
+presets, not a shipped preset.
 
 ## Uninstall
 
@@ -80,5 +100,5 @@ Start a **standard** preset session. It must have no `omd_*` tools, no
 plugin_manager remove_bundle  target: @jhcai11/oh-my-dsh
 ```
 
-This removes the preset declarations and the linked package. It does not delete
-project `.omd/` directories.
+This removes the preset declarations, the profile-level runtime row, and the
+linked package. It does not delete project `.omd/` directories.

@@ -42,10 +42,10 @@ function projectSummary(name, parsed, file) {
   }
 }
 
-/** Bundled OMD skills for this preset's agent. */
+/** Bundled OMD skills for this row: one role's set, or all of them when global. */
 export async function createSkills(runtime) {
   const skills = []
-  for (const name of skillsFor(runtime.agentId, {})) {
+  for (const name of skillsFor(runtime.configuredAgent, {})) {
     if (name === '*') continue
     const file = new URL(`../../skills/${name}/SKILL.md`, import.meta.url)
     const content = await loadSkillText(name)

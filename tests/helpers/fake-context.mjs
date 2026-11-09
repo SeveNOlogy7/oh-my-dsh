@@ -26,7 +26,11 @@ export function createFakeContext({ cwd, agentPreset = 'omd-sisyphus' } = {}) {
     },
     restrict(filter) {
       state.restrictions.push(filter)
-      return () => {}
+      // Disposal really lifts the filter, as it does in DSH, so a test can
+      // observe a restriction being re-applied on a preset switch.
+      return () => {
+        state.restrictions = state.restrictions.filter((entry) => entry !== filter)
+      }
     },
     guard(guard) {
       state.guards.push(guard)

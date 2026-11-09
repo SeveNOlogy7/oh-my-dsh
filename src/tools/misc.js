@@ -40,7 +40,7 @@ export function createMiscTools(runtime) {
           plan: args.plan,
           section: args.section ?? 'learnings',
           text: args.text,
-          agent: runtime.agentId,
+          agent: state.role,
           task: args.task,
         })
         return `appended to ${path.basename(file)}`
@@ -69,12 +69,12 @@ export function createMiscTools(runtime) {
         }
         if (args.action === 'clear') {
           await runtime.clearMode(parent)
-          await runtime.ledger(state.cwd, { event: 'mode-cleared', agent: runtime.agentId })
+          await runtime.ledger(state.cwd, { event: 'mode-cleared', agent: state.role })
           return 'mode cleared'
         }
         if (!args.mode) throw new Error('mode is required for action=set')
         const saved = await runtime.setMode(parent, args.mode)
-        await runtime.ledger(state.cwd, { event: 'mode-set', agent: runtime.agentId, mode: args.mode })
+        await runtime.ledger(state.cwd, { event: 'mode-set', agent: state.role, mode: args.mode })
         return `mode set to ${saved.mode}`
       },
     ),
@@ -119,7 +119,7 @@ export function createMiscTools(runtime) {
           agent: parent,
           workspace: state.cwd,
           config: state.config,
-          agentId: runtime.agentId,
+          agentId: state.role,
           sources: [],
         })
         return renderDoctor(diagnosis)

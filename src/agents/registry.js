@@ -220,25 +220,42 @@ export function presetIdFor(id) {
   return `omd-${id}`
 }
 
+/**
+ * The role a preset id stands for, or `null` when the preset is not an OMD one.
+ *
+ * This is what makes a single profile-level runtime row work: the row no longer
+ * declares `agent`, so the role is read back off whichever preset the session
+ * actually runs. Every non-OMD preset (the shipped `standard`, `ptc`, `minimal`
+ * and `cordis`) resolves to `null`, the capability-only identity.
+ */
 export function agentIdFromPreset(presetId) {
   if (!presetId?.startsWith('omd-')) return null
   const id = presetId.slice(4)
   return AGENTS[id] ? id : null
 }
 
+/**
+ * `null` is the capability-only identity: a session whose preset is not an OMD
+ * one still gets the orchestration surface, but no role, no persona, and no
+ * role policy. Every reader below therefore treats `null` as "unrestricted"
+ * rather than as an unknown role, which is the opposite of how an unknown
+ * string id is treated.
+ */
 export function isReadOnly(id, settings = {}) {
+  if (id == null) return Boolean(settings.readOnly)
   return Boolean(AGENTS[id]?.readOnly || settings.readOnly)
 }
 
 export function canDelegate(id, settings = {}) {
+  if (id == null) return settings.canDelegate !== false
   return Boolean(AGENTS[id]?.canDelegate && settings.canDelegate !== false)
 }
 
 export function allowedSubagents(id, config) {
-  const base = AGENTS[id]?.allowedSubagents ?? []
-  const override = config?.agents?.[id]?.allowedSubagents
+  const override = id == null ? undefined : config?.agents?.[id]?.allowedSubagents
   if (Array.isArray(override)) return override
-  return base
+  if (id == null) return ['*']
+  return AGENTS[id]?.allowedSubagents ?? []
 }
 
 export function isSubagentAllowed(caller, target, config) {
@@ -252,6 +269,7 @@ export function writeScopes(id) {
 }
 
 export function skillsFor(id, config) {
+  if (id == null) return [...SKILL_NAMES]
   const base = AGENTS[id]?.skills ?? []
   const override = config?.agents?.[id]?.skills
   const list = Array.isArray(override) ? override : base

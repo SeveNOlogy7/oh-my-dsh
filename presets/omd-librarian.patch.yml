@@ -66,7 +66,3 @@
                   thresholdChars: 8192
                   headChars: 4096
                   tailChars: 1024
-          - id: omd
-            name: "@jhcai11/oh-my-dsh"
-            config:
-              agent: "librarian"

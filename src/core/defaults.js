@@ -40,24 +40,30 @@ export const DEFAULT_CONFIG = Object.freeze({
 
 export const TOP_LEVEL_KEYS = Object.freeze(Object.keys(DEFAULT_CONFIG))
 
+/**
+ * The neutral settings every role starts from, and the ones the capability-only
+ * identity uses.
+ *
+ * A session whose preset is not an OMD one has no registry entry at all. Sharing
+ * this exact object with it means a lookup miss can never hand it another role's
+ * defaults, which is what `DEFAULT_AGENT_SETTINGS[id] ?? sisyphus` would do the
+ * day a role grows a non-neutral default.
+ */
+export const NEUTRAL_AGENT_SETTINGS = Object.freeze({
+  provider: null,
+  model: null,
+  modelRef: null,
+  reasoningEffort: null,
+  temperature: null,
+  maxTokens: null,
+  promptAppend: '',
+  readOnly: null,
+  canDelegate: null,
+  allowedSubagents: null,
+})
+
 export const DEFAULT_AGENT_SETTINGS = Object.freeze(
-  Object.fromEntries(
-    AGENT_IDS.map((id) => [
-      id,
-      Object.freeze({
-        provider: null,
-        model: null,
-        modelRef: null,
-        reasoningEffort: null,
-        temperature: null,
-        maxTokens: null,
-        promptAppend: '',
-        readOnly: null,
-        canDelegate: null,
-        allowedSubagents: null,
-      }),
-    ]),
-  ),
+  Object.fromEntries(AGENT_IDS.map((id) => [id, NEUTRAL_AGENT_SETTINGS])),
 )
 
 export const DEFAULT_CATEGORIES = Object.freeze({

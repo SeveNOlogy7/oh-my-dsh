@@ -5,7 +5,7 @@ import { exists, readJsonSafe, readJsoncSafe, readTextSafe } from '../core/atomi
 import { OMD_DIR, OMO_COMMIT, OMO_VERSION, AGENT_IDS, UI_PACKAGE } from '../core/constants.js'
 import { loadConfig } from '../core/config.js'
 import { omdPath } from '../core/paths.js'
-import { AGENTS, presetIdFor } from '../agents/registry.js'
+import { AGENTS, presetIdFor, agentIdFromPreset } from '../agents/registry.js'
 import { resolveActivePreset } from './active-preset.js'
 
 function check(id, status, detail, fix) {
@@ -106,11 +106,27 @@ export async function runDoctor({ ctx, agent, workspace, config, agentId, source
     checks.push(check('client-half', 'WARN', 'clientModules service unavailable; cannot confirm the UI renderer'))
   }
 
+  // The runtime row is mounted once for the whole profile, so a non-OMD preset
+  // is no longer a degraded state: it is the capability-only identity, which
+  // has the full orchestration surface and no OMD persona. Only a preset that
+  // cannot be read at all is worth a warning.
   const activePreset = await resolveActivePreset(ctx, agent)
+  const activeRole = agentIdFromPreset(activePreset)
   checks.push(
-    activePreset?.startsWith('omd-')
-      ? check('active-preset', 'PASS', activePreset)
-      : check('active-preset', 'WARN', `current preset is ${activePreset ?? 'unknown'}; select an OMD preset for full orchestration`),
+    activePreset == null
+      ? check(
+          'active-preset',
+          'WARN',
+          'current preset is unknown; capability-only orchestration still applies',
+          'Select a preset, or an OMD preset to also get a role persona.',
+        )
+      : activeRole
+        ? check('active-preset', 'PASS', `${activePreset} (role: ${activeRole})`)
+        : check(
+            'active-preset',
+            'PASS',
+            `${activePreset} (capability-only; orchestration available, no OMD persona)`,
+          ),
   )
 
   const omd = omdPath(workspace)

@@ -102,8 +102,10 @@ Always-on rules are injected; glob rules are added when a matching file is read.
 ## Skills
 
 `skills.paths` is reserved for project skill discovery. Built-in OMD skills are
-registered per preset; project `<cwd>/.omd/skills/*/SKILL.md` is discovered by
-the `omd-workspace` provider.
+registered once, by the single profile-level `omd-runtime` row, so every preset
+sees the same registration; which of them a session may use belongs to the role
+resolved per request, not to registration. Project
+`<cwd>/.omd/skills/*/SKILL.md` is discovered by the `omd-workspace` provider.
 
 ## Language
 
@@ -111,22 +113,26 @@ The plugin row Config key `language` selects the language of the description
 strings the model reads: tool descriptions, slash-command descriptions, and the
 bundled skills' `description` and `whenToUse`. It accepts `en` (default) or
 `zh`; any other value, and a missing key, resolves to `en`. This key is not an
-`.omd/config.jsonc` setting — it is set per preset row in the profile's
-`cordis.patch.yml`:
+`.omd/config.jsonc` setting — it is set on the profile's single runtime row in
+`presets/omd-runtime.patch.yml`:
 
 ```yaml
-- id: omd
-  name: "@jhcai11/oh-my-dsh"
-  config:
-    agent: "sisyphus"
-    language: "zh"
+- insert:
+    - id: omd-runtime
+      name: "@jhcai11/oh-my-dsh"
+      config:
+        language: "zh"
 ```
 
-It is per row, so two presets in one profile can use different languages.
-Changing it restarts the plugin: the Loader must reload the row before the new
-descriptions are registered. Only descriptions change — prompt bodies,
-`SKILL.md` bodies, and preset picker names stay English, and tool, command,
-skill, and parameter names never change.
+The row is declared once for the whole profile, so one `language` applies to
+every preset, including the shipped `standard`, `ptc`, `minimal`, and `cordis`.
+There is no per-preset plugin row left to set it on. The `agent` key that used
+to sit beside it is no longer how a session finds its role either: the role is
+resolved from the active preset id at request time. Changing `language`
+restarts the plugin: the Loader must reload the row before the new descriptions
+are registered. Only descriptions change — prompt bodies, `SKILL.md` bodies, and
+preset picker names stay English, and tool, command, skill, and parameter names
+never change.
 
 ## Settings page
 

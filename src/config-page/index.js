@@ -17,7 +17,7 @@ import { buildPluginSection } from './plugin-info.js'
 export { createConfigStore, loadConfigSchema, patchPaths, flattenPatch, splitProblems } from './config-store.js'
 export { applyPathUpdates, scanJsonc } from './jsonc-spans.js'
 export { collectProblems, validate, unsupportedKeywordsIn } from './schema.js'
-export { buildLanguageSnippet, buildPluginSection, extractConfigBlock, injectLanguage, languageInfo, routingTiers } from './plugin-info.js'
+export { buildLanguageSnippet, buildPluginSection, languageInfo, routingTiers } from './plugin-info.js'
 
 /** Command the page calls; must match the registration in `src/commands/index.js`. */
 export const CONFIG_COMMAND_NAME = 'omd-config'
@@ -79,7 +79,7 @@ export function createConfigPage(options = {}) {
     buildPluginSection({
       config: state.config,
       language: context.language,
-      agentId: context.agentId,
+      role: context.agentId ?? null,
       packageRoot: options.packageRoot,
       profileDir: options.profileDir ?? process.env.DSH_PROFILE_DIR ?? null,
     })

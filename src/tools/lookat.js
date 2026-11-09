@@ -10,16 +10,31 @@ const MEDIA = {
   '.gif': 'image/gif',
 }
 
+/**
+ * Resolve a service for one call, preferring the Agent's own context.
+ *
+ * A tool is registered once, but the row that registers it may sit at the
+ * profile's top level, where agent-scoped services (`fs`, `attachments`) are not
+ * resolvable yet. Probing them at registration time silently dropped the tool;
+ * `delegate.js` already checks its services per call, and this follows it.
+ */
+function serviceAt(ctx, agent, name) {
+  try {
+    const scoped = agent?.ctx?.get?.(name)
+    if (scoped) return scoped
+  } catch {
+    // fall through to the registering context
+  }
+  try {
+    return ctx.get(name)
+  } catch {
+    return undefined
+  }
+}
+
 /** Delegates image inspection to the multimodal-looker preset. */
 export function createLookAtTools(runtime) {
   const ctx = runtime.ctx
-  if (
-    !ctx.get('attachments')?.saveImages ||
-    !ctx.get('subagents')?.startActivation ||
-    !ctx.get('fs')?.readBytes
-  ) {
-    return []
-  }
 
   return [
     textTool(
@@ -41,24 +56,33 @@ export function createLookAtTools(runtime) {
       async (args, exec) => {
         const parent = requireAgent(exec)
         const state = await runtime.stateFor(parent)
+        const attachments = serviceAt(ctx, parent, 'attachments')
+        const subagents = serviceAt(ctx, parent, 'subagents')
+        const fs = serviceAt(ctx, parent, 'fs')
+        if (!attachments?.saveImages || !subagents?.startActivation || !fs?.readBytes) {
+          throw new Error('omd_look_at needs the attachments, subagents, and fs services; this composition does not provide them')
+        }
         const blocks = [{ type: 'text', text: args.prompt }]
         for (const relative of args.paths ?? []) {
           const mediaType = MEDIA[path.extname(relative).toLowerCase()]
           if (!mediaType) throw new Error(`unsupported image type: ${relative}`)
-          const target = await ctx.get('fs').resolve(relative, { cwd: state.cwd, signal: exec.signal })
-          const bytes = await ctx.get('fs').readBytes(target, exec.signal, 20 * 1024 * 1024)
-          const [ref] = await ctx.get('attachments').saveImages([{ data: bytes, mediaType, name: path.basename(relative) }])
+          const target = await fs.resolve(relative, { cwd: state.cwd, signal: exec.signal })
+          const bytes = await fs.readBytes(target, exec.signal, 20 * 1024 * 1024)
+          const [ref] = await attachments.saveImages([{ data: bytes, mediaType, name: path.basename(relative) }])
           blocks.push({ type: 'image', attachment: ref })
         }
         const release = await runtime.scheduler.acquire('look_at')
         try {
-          const activation = await ctx.get('subagents').startActivation({
+          const activation = await subagents.startActivation({
             provider: 'spawn',
             label: 'omd:multimodal-looker',
             request: {
               cwd: state.cwd,
               prompt: blocks,
               parent,
+              // The looker role is a registered preset, so the child is
+              // composed (and its role resolved) by preset id, exactly as
+              // `omd_delegate` composes a named subagent.
               agentPreset: 'omd-multimodal-looker',
               maxDepth: 1,
             },

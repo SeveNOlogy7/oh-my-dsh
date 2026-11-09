@@ -35,7 +35,9 @@ test('oracle preset registers read-only tools and persona', async () => {
   assert.ok(!names.includes('omd_delegate'))
   const persona = env.state.sections.find((section) => section.name === 'deployment:persona-prefix')
   assert.ok(persona)
-  assert.match(persona.text, /Oracle/)
+  // The persona is a lazy section: a globally mounted row is created before the
+  // session's preset is known, so its text is read at request time.
+  assert.match(persona.text(), /Oracle/)
   assert.ok(env.state.restrictions.some((filter) => filter.deny?.includes('write') && filter.deny?.includes('edit')))
   env.dispose()
 })
@@ -138,13 +140,19 @@ test('doctor reads the selected preset, not the creation-time header', async () 
   assert.match(selected, /PASS active-preset: omd-sisyphus/)
 
   // A session with no live record and no readable log still falls back to the
-  // header instead of reporting `unknown`.
+  // header instead of reporting `unknown`. A shipped preset is no longer a
+  // degraded state: it is the capability-only identity.
   env.ctx.sessions.get = () => ({ header: { agentPreset: 'standard', cwd: env.workspace } })
   env.ctx.sessionQuery.readSession = async () => {
     throw new Error('unreadable log')
   }
   const fallback = await doctor.execute({}, { agent: env.agent, signal: new AbortController().signal })
-  assert.match(fallback, /WARN active-preset: current preset is standard/)
+  assert.match(fallback, /PASS active-preset: standard \(capability-only/)
+
+  // Only a preset that cannot be read at all still warns.
+  env.ctx.sessions.get = () => ({ header: { cwd: env.workspace } })
+  const unknown = await doctor.execute({}, { agent: env.agent, signal: new AbortController().signal })
+  assert.match(unknown, /WARN active-preset: current preset is unknown/)
   env.dispose()
 })
 
@@ -240,3 +248,179 @@ test('bundled skills and the workspace provider register', async () => {
   assert.equal(env.state.providers[0].name, 'omd-workspace')
   env.dispose()
 })
+
+// ---------------------------------------------------------------------------
+// The global runtime row: one mount, role resolved from the active preset
+// ---------------------------------------------------------------------------
+
+/**
+ * Mount the row the way `presets/omd-runtime.patch.yml` does: no `agent` key at
+ * all. The role then has to come from the session's preset.
+ */
+async function setupGlobal({ preset = 'standard', config } = {}) {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'omd-global-'))
+  const workspace = path.join(root, 'project')
+  await fs.mkdir(workspace, { recursive: true })
+  if (config) {
+    await fs.mkdir(path.join(workspace, '.omd'), { recursive: true })
+    await fs.writeFile(path.join(workspace, '.omd', 'config.jsonc'), JSON.stringify(config))
+  }
+  const { ctx, agent: agentHandle, state } = createFakeContext({ cwd: workspace, agentPreset: preset })
+  for (const name of ['read', 'write', 'edit', 'pwsh', 'grep', 'glob', 'todo_write']) {
+    state.tools.push({ name, description: name, parameters: { type: 'object' } })
+  }
+  const dispose = apply(ctx, {})
+  await new Promise((resolve) => setTimeout(resolve, 30))
+  await emit(ctx, 'agent/created', { agent: agentHandle })
+  await new Promise((resolve) => setTimeout(resolve, 10))
+  return { root, workspace, ctx, agent: agentHandle, state, dispose }
+}
+
+test('the global row registers the whole surface for a preset that is not an OMD one', async () => {
+  const env = await setupGlobal({ preset: 'standard' })
+  const names = env.state.tools.map((tool) => tool.name)
+  // The capability set is registered once, for every preset.
+  assert.ok(names.includes('omd_status'))
+  assert.ok(names.includes('omd_mode'))
+  assert.ok(names.includes('omd_delegate'), 'orchestration must be available outside OMD presets')
+  assert.ok(names.includes('omd_doctor'))
+  assert.ok(env.state.skills.some((skill) => skill.name === 'omd-ulw-execute'), 'ultrawork skills ship globally')
+  assert.ok(env.state.commands.some((command) => command.name === 'omd-ulw'))
+  env.dispose()
+})
+
+test('a non-OMD preset is capability-only: orchestration, but no persona and no role policy', async () => {
+  const env = await setupGlobal({ preset: 'standard' })
+  const persona = env.state.sections.find((section) => section.name === 'deployment:persona-prefix')
+  assert.ok(persona, 'the section still exists so the prompt composes')
+  assert.equal(persona.text(), '', 'capability-only must inject no OMD persona')
+
+  // Nothing restricts a session that has no role.
+  assert.equal(
+    env.state.restrictions.some((filter) => filter.deny?.includes('write')),
+    false,
+    'a capability-only session keeps its own write tools',
+  )
+
+  // Ultrawork is the point of the change, so drive it end to end.
+  const mode = env.state.tools.find((tool) => tool.name === 'omd_mode')
+  const set = await mode.execute(
+    { action: 'set', mode: 'ultrawork' },
+    { agent: env.agent, signal: new AbortController().signal },
+  )
+  assert.match(set, /ultrawork/)
+  const saved = JSON.parse(
+    await fs.readFile(path.join(env.workspace, '.omd', 'runtime', 'session-1', 'mode.json'), 'utf8'),
+  )
+  assert.equal(saved.mode, 'ultrawork')
+
+  const status = env.state.tools.find((tool) => tool.name === 'omd_status')
+  const board = await status.execute({}, { agent: env.agent, signal: new AbortController().signal })
+  assert.match(board, /ultrawork/)
+  env.dispose()
+})
+
+test('the restriction is lifted again when the preset leaves the OMD roles', async () => {
+  const env = await setupGlobal({ preset: 'standard' })
+  const deniesWrite = () => env.state.restrictions.some((filter) => filter.deny?.includes('write'))
+  assert.equal(deniesWrite(), false, 'capability-only starts unrestricted')
+
+  env.ctx.sessions.get = () => ({
+    header: { agentPreset: 'standard', cwd: env.workspace },
+    ownEvents: () => [{ type: 'agent-preset/selected', data: { agentPreset: 'omd-oracle' } }],
+  })
+  await emit(env.ctx, 'agent-preset/selected', 'session-1', 'omd-oracle')
+  assert.equal(deniesWrite(), true, 'the read-only role is enforced')
+
+  // Switching back while the session is still blank must dispose the role
+  // policy, not stack another one on top of it.
+  await emit(env.ctx, 'agent-preset/selected', 'session-1', 'standard')
+  assert.equal(deniesWrite(), false, 'the old role restriction must be lifted')
+  const persona = env.state.sections.find((section) => section.name === 'deployment:persona-prefix')
+  assert.equal(persona.text(), '')
+  env.dispose()
+})
+
+test('omd_look_at registers even when the row cannot resolve the agent services yet', async () => {
+  // A top-level runtime row is applied before `attachments` and `fs` resolve
+  // from its context. Probing them at registration time silently dropped the
+  // tool, so the check moved to call time and resolves through the Agent.
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'omd-lookat-'))
+  const workspace = path.join(root, 'project')
+  await fs.mkdir(workspace, { recursive: true })
+  const { ctx, agent: agentHandle, state } = createFakeContext({ cwd: workspace, agentPreset: 'omd-sisyphus' })
+  for (const name of ['read', 'write', 'edit']) {
+    state.tools.push({ name, description: name, parameters: { type: 'object' } })
+  }
+  const attachments = ctx.attachments
+  const fsService = ctx.fs
+  // Root context: agent-scoped services are not resolvable yet.
+  ctx.get = (name) => (name === 'attachments' || name === 'fs' ? undefined : ctx[name])
+  // Agent context: they are.
+  agentHandle.ctx.get = (name) =>
+    name === 'attachments' ? attachments : name === 'fs' ? fsService : ctx[name]
+
+  const dispose = apply(ctx, {})
+  await new Promise((resolve) => setTimeout(resolve, 30))
+  await emit(ctx, 'agent/created', { agent: agentHandle })
+  await new Promise((resolve) => setTimeout(resolve, 10))
+
+  const look = state.tools.find((tool) => tool.name === 'omd_look_at')
+  assert.ok(look, 'the looker tool must register from the top-level row')
+  const result = await look.execute(
+    { paths: ['a.png'], prompt: 'what is this' },
+    { agent: agentHandle, signal: new AbortController().signal },
+  )
+  assert.match(result, /child result/)
+  dispose()
+})
+
+test('capability-only inherits no role override', async () => {
+  // `agents.<id>` is keyed by role. A capability-only session has no role, so a
+  // per-role `promptAppend` must not reach it — which is what a lookup miss
+  // falling back to another role's defaults would have done.
+  const env = await setupGlobal({
+    preset: 'standard',
+    config: { agents: { sisyphus: { promptAppend: 'SISYPHUS-ONLY APPEND' } } },
+  })
+  const persona = env.state.sections.find((section) => section.name === 'deployment:persona-prefix')
+  assert.equal(persona.text(), '', 'a role override must not leak into capability-only')
+  assert.equal(env.state.tools.some((tool) => tool.name === 'omd_delegate'), true)
+  env.dispose()
+})
+
+test('an OMD preset still resolves to its role under the global row', async () => {
+  const env = await setupGlobal({ preset: 'omd-atlas' })
+  const persona = env.state.sections.find((section) => section.name === 'deployment:persona-prefix')
+  assert.match(persona.text(), /Atlas/)
+  // Atlas is the read-only conductor: it delegates, but it does not write.
+  assert.ok(
+    env.state.restrictions.some((filter) => filter.deny?.includes('write') && filter.deny?.includes('edit')),
+    'the role policy is applied per agent',
+  )
+  assert.ok(env.state.tools.some((tool) => tool.name === 'omd_delegate'))
+  env.dispose()
+})
+
+test('the policy follows the picker when the preset changes under a global row', async () => {
+  const env = await setupGlobal({ preset: 'standard' })
+  const persona = env.state.sections.find((section) => section.name === 'deployment:persona-prefix')
+  assert.equal(persona.text(), '')
+
+  // The picker choice arrives after creation, as an `agent-preset/selected`.
+  env.ctx.sessions.get = () => ({
+    header: { agentPreset: 'standard', cwd: env.workspace },
+    ownEvents: () => [{ type: 'agent-preset/selected', data: { agentPreset: 'omd-prometheus' } }],
+  })
+  await emit(env.ctx, 'agent-preset/selected', 'session-1', 'omd-prometheus')
+
+  assert.match(persona.text(), /Prometheus/, 'the persona must follow the switch')
+  // Prometheus may only write inside `.omd/`, enforced by the tool guard whose
+  // closure reads the role at call time.
+  const guard = env.state.guards[0]
+  assert.ok(guard)
+  assert.match(guard({ name: 'write', arguments: { file_path: 'src/a.ts' } }), /write scope/)
+  assert.equal(guard({ name: 'edit', arguments: { file_path: '.omd/plans/a.md' } }), undefined)
+  env.dispose()
+})
+

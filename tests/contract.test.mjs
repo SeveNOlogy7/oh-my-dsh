@@ -201,18 +201,42 @@ test('the Client asset is a top-level row the Loader scan can resolve', async ()
   assert.notEqual(uiManifest.name, pkg.name, 'the asset must not reuse the runtime package name')
 
   const patches = pkg.dsh.bundle.patch
-  assert.equal(patches.length, AGENT_IDS.length + 1, 'patch list must end with the browser asset row')
+  // Eleven preset rows, the single top-level runtime row, and the asset row.
+  assert.equal(
+    patches.length,
+    AGENT_IDS.length + 2,
+    'patch list must hold every preset, the runtime row, and the browser asset row',
+  )
+  assert.equal(patches[patches.length - 1], './presets/omd-ui.patch.yml', 'the asset row stays last')
+
+  // The runtime row is mounted once for the whole profile and must therefore
+  // name no agent: a row that named one would serve that role only, which is
+  // exactly the confinement this layout removes.
+  const runtimePatch = await read('presets/omd-runtime.patch.yml')
+  assert.match(runtimePatch, /id: omd-runtime/)
+  assert.ok(
+    runtimePatch.includes(`name: ${JSON.stringify(pkg.name)}`),
+    'the runtime row must resolve to the published package name',
+  )
+  assert.ok(!/^\s+agent:/m.test(runtimePatch), 'the runtime row must not pin an agent')
+
   // A row naming a module the installed DSH cannot start leaves its preset
   // audited as broken, and the picker hides a broken preset — so every primary
   // role silently disappeared from the new-session selector. The old generator
   // inserted this subpath; the shipped composition no longer loads it.
-  for (const relative of patches.slice(0, AGENT_IDS.length)) {
+  for (const id of AGENT_IDS) {
+    const relative = `presets/omd-${id}.patch.yml`
+    assert.ok(patches.includes(`./${relative}`), `${relative} must be in the patch list`)
     const text = await read(relative)
     assert.ok(
       !text.includes('dsh-tool-subagent-control/list-agents'),
       `${relative} mounts a row the installed DSH cannot start`,
     )
+    // The preset id is what tells the runtime which role it is serving, so the
+    // preset itself must stay free of a nested runtime row.
+    assert.ok(!/^\s+- id: omd$/m.test(text), `${relative} must not nest the runtime row`)
   }
+
   const uiPatch = await read(patches[patches.length - 1])
   // The include plugin resolves a row name against the patch file's directory.
   assert.match(uiPatch, /id: omd-ui/)

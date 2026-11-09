@@ -27,10 +27,17 @@ if (pkg.private === true) note('package.json is private; npm publish would be re
 if (pkg.type !== 'module') note('package must be ESM')
 
 const patches = pkg.dsh?.bundle?.patch
-const presetPatches = Array.isArray(patches) ? patches.slice(0, AGENT_IDS.length) : []
-if (!Array.isArray(patches) || patches.length <= AGENT_IDS.length) {
-  note(`dsh.bundle.patch must list the ${AGENT_IDS.length} preset patches plus the browser asset row`)
+const RUNTIME_RELATIVE = './presets/omd-runtime.patch.yml'
+const UI_RELATIVE = './presets/omd-ui.patch.yml'
+if (!Array.isArray(patches) || patches.length !== AGENT_IDS.length + 2) {
+  note(`dsh.bundle.patch must list the ${AGENT_IDS.length} preset patches, the runtime row, and the browser asset row`)
 } else {
+  // The runtime is one top-level row, so the preset patches are everything that
+  // is neither it nor the browser asset row.
+  const presetPatches = patches.filter((relative) => relative !== RUNTIME_RELATIVE && relative !== UI_RELATIVE)
+  if (presetPatches.length !== AGENT_IDS.length) {
+    note(`expected ${AGENT_IDS.length} preset patches, found ${presetPatches.length}`)
+  }
   for (const [index, relative] of presetPatches.entries()) {
     const file = path.join(root, relative)
     if (!(await exists(file))) {
@@ -39,14 +46,12 @@ if (!Array.isArray(patches) || patches.length <= AGENT_IDS.length) {
     }
     const text = await fs.readFile(file, 'utf8')
     const id = AGENT_IDS[index]
-    // The row specifier must track the package name: it resolves from the
-    // profile's node_modules, so a published scoped name would leave a
-    // hard-coded bare name unresolvable and every preset broken.
-    const pluginRow = `name: ${JSON.stringify(pkg.name)}`
     if (!text.includes(`id: preset-${presetIdFor(id)}`)) note(`${relative} does not declare preset-${presetIdFor(id)}`)
-    if (!text.includes(pluginRow)) note(`${relative} does not mount ${pkg.name}`)
-    if (!new RegExp(`agent:\\s*"?${id}"?\\s*$`, 'm').test(text)) note(`${relative} does not set agent: ${id}`)
-    if (text.split(pluginRow).length - 1 !== 1) note(`${relative} must mount exactly one runtime row`)
+    // The preset id is now the only thing that tells the runtime which role it
+    // serves, so a preset must carry no runtime row of its own: nesting one
+    // would mount the plugin twice and confine it to this preset again.
+    if (text.includes(`name: ${JSON.stringify(pkg.name)}`)) note(`${relative} must not nest the runtime row`)
+    if (/^\s+agent:\s*"?[\w-]+"?\s*$/m.test(text)) note(`${relative} must not pin an agent`)
     // A row naming a module the installed DSH cannot start leaves the preset
     // audited as broken, which hides it from the picker entirely. That subpath
     // was removed from the shipped composition, so it must never come back.
@@ -54,16 +59,34 @@ if (!Array.isArray(patches) || patches.length <= AGENT_IDS.length) {
       note(`${relative} mounts dsh-tool-subagent-control/list-agents, which is not a loadable row`)
     }
   }
-  const uiPatch = path.join(root, patches[AGENT_IDS.length])
+
+  const runtimePatch = path.join(root, RUNTIME_RELATIVE)
+  if (!(await exists(runtimePatch))) {
+    note(`missing patch: ${RUNTIME_RELATIVE}`)
+  } else {
+    const text = await fs.readFile(runtimePatch, 'utf8')
+    if (!text.includes('id: omd-runtime')) note(`${RUNTIME_RELATIVE} does not declare id: omd-runtime`)
+    // The row specifier must track the package name: it resolves from the
+    // profile's node_modules, so a published scoped name would leave a
+    // hard-coded bare name unresolvable and the whole runtime row dead.
+    const pluginRow = `name: ${JSON.stringify(pkg.name)}`
+    if (!text.includes(pluginRow)) note(`${RUNTIME_RELATIVE} does not mount ${pkg.name}`)
+    if (text.split(pluginRow).length - 1 !== 1) note(`${RUNTIME_RELATIVE} must mount exactly one runtime row`)
+    if (/^\s+agent:\s*"?[\w-]+"?\s*$/m.test(text)) {
+      note(`${RUNTIME_RELATIVE} must not pin an agent; the role is read from the active preset`)
+    }
+  }
+
+  const uiPatch = path.join(root, UI_RELATIVE)
   if (!(await exists(uiPatch))) {
-    note(`missing patch: ${patches[AGENT_IDS.length]}`)
+    note(`missing patch: ${UI_RELATIVE}`)
   } else {
     const text = await fs.readFile(uiPatch, 'utf8')
-    if (!text.includes('id: omd-ui')) note(`${patches[AGENT_IDS.length]} does not declare id: omd-ui`)
+    if (!text.includes('id: omd-ui')) note(`${UI_RELATIVE} does not declare id: omd-ui`)
     // A directory specifier fails with ERR_UNSUPPORTED_DIR_IMPORT and leaves the
     // row inactive, so the browser bundle is never served.
     if (!text.includes('name: "../ui/index.js"')) {
-      note(`${patches[AGENT_IDS.length]} must name ../ui/index.js, not a directory`)
+      note(`${UI_RELATIVE} must name ../ui/index.js, not a directory`)
     }
     // The include plugin resolves a row name against the patch file's own
     // directory, so "../ui" must land on the asset package.

@@ -40,7 +40,7 @@ export function apply(ctx, config = {}) {
     try {
       const dir = path.join(process.cwd(), '.omd')
       fs.mkdirSync(dir, { recursive: true })
-      const probe = { at: new Date().toISOString(), agent: runtime.agentId }
+      const probe = { at: new Date().toISOString(), agent: runtime.configuredAgent }
       try {
         const modules = ctx.get('clientModules')
         probe.clientPath = typeof modules?.clientPath === 'function' ? modules.clientPath('oh-my-dsh') ?? null : 'service-absent'

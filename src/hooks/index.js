@@ -55,6 +55,7 @@ export async function installAgentHooks(runtime, agent, state) {
 
   const register = () => {
     const disposers = []
+    const policyDisposers = []
     const push = (disposer) => {
       if (typeof disposer === 'function') disposers.push(disposer)
     }
@@ -67,7 +68,10 @@ export async function installAgentHooks(runtime, agent, state) {
           agent.ctx.systemPrompt.section({
             name: 'deployment:persona-prefix',
             order: prefixOrder,
-            text: state.prompt,
+            // Lazy for the same reason `omd:rules` and `omd:mode` are: a
+            // globally mounted row is created before the session's preset is
+            // known, so the persona cannot be a creation-time string.
+            text: () => state.personaText,
             interpolate: true,
           }),
         )
@@ -97,36 +101,66 @@ export async function installAgentHooks(runtime, agent, state) {
       }
     }
 
-    const names = visibleToolNames(agent)
-    const roleRestriction = restrictionFor(runtime.agentId)
-    let restriction = filterRestriction(roleRestriction, names)
-    if (!roleRestriction?.allow) {
-      const extraDeny = []
-      if (state.settings.readOnly) extraDeny.push('write', 'edit')
-      if (!canDelegate(runtime.agentId, state.settings)) {
-        extraDeny.push(
-          ...names.filter(
-            (name) =>
-              name === 'omd_delegate' ||
-              name.startsWith('omd_background_') ||
-              name === 'omd_look_at',
-          ),
-        )
-      }
-      if (extraDeny.length) {
-        restriction = {
-          deny: [...new Set([...(restriction?.deny ?? []), ...extraDeny])].filter((name) => names.includes(name)),
+    // The tool surface is registered once for the whole profile, so what a role
+    // may actually see is decided here, per agent, and re-decided whenever the
+    // picker changes the preset under a globally mounted row.
+    const applyPolicy = () => {
+      for (const dispose of policyDisposers.splice(0).reverse()) {
+        try {
+          dispose()
+        } catch {
+          // best effort
         }
       }
+      const names = visibleToolNames(agent)
+      const role = state.role
+      const roleRestriction = restrictionFor(role)
+      let restriction = filterRestriction(roleRestriction, names)
+      if (!roleRestriction?.allow) {
+        const extraDeny = []
+        if (state.settings.readOnly) extraDeny.push('write', 'edit')
+        if (!canDelegate(role, state.settings)) {
+          extraDeny.push(
+            ...names.filter(
+              (name) =>
+                name === 'omd_delegate' ||
+                name.startsWith('omd_background_') ||
+                name === 'omd_look_at',
+            ),
+          )
+        }
+        if (extraDeny.length) {
+          restriction = {
+            deny: [...new Set([...(restriction?.deny ?? []), ...extraDeny])].filter((name) => names.includes(name)),
+          }
+        }
+      }
+      if (restriction?.allow?.length || restriction?.deny?.length) {
+        if (agent.ctx.tools?.restrict) policyDisposers.push(agent.ctx.tools.restrict(restriction))
+      }
+      if (!state.config.taskSystem.enabled) {
+        const taskTools = names.filter((name) => name.startsWith('omd_task_'))
+        if (taskTools.length && agent.ctx.tools?.restrict) {
+          policyDisposers.push(agent.ctx.tools.restrict({ deny: taskTools }))
+        }
+      } else if (names.includes('todo_write') && agent.ctx.tools?.restrict) {
+        policyDisposers.push(agent.ctx.tools.restrict({ deny: ['todo_write'] }))
+      }
     }
-    if (restriction?.allow?.length || restriction?.deny?.length) {
-      if (agent.ctx.tools?.restrict) push(agent.ctx.tools.restrict(restriction))
-    }
-    if (!state.config.taskSystem.enabled) {
-      const taskTools = names.filter((name) => name.startsWith('omd_task_'))
-      if (taskTools.length && agent.ctx.tools?.restrict) push(agent.ctx.tools.restrict({ deny: taskTools }))
-    } else if (names.includes('todo_write') && agent.ctx.tools?.restrict) {
-      push(agent.ctx.tools.restrict({ deny: ['todo_write'] }))
+    applyPolicy()
+
+    // A globally mounted row resolves its role from a preset the session may
+    // still be choosing, so follow the picker rather than the creation header.
+    if (runtime.global && typeof runtime.ctx.on === 'function') {
+      const offPreset = runtime.ctx.on('agent-preset/selected', async (sessionId, preset) => {
+        if (sessionId !== agent.id) return
+        try {
+          if (await runtime.refreshRole(agent, preset)) applyPolicy()
+        } catch {
+          // the policy hook must never break a preset switch
+        }
+      })
+      if (typeof offPreset === 'function') push(offPreset)
     }
 
     if (agent.ctx.tools?.guard) {
@@ -135,9 +169,9 @@ export async function installAgentHooks(runtime, agent, state) {
           if (!['write', 'edit'].includes(execution.name)) return undefined
           const file = execution.arguments?.file_path
           if (!file || typeof file !== 'string') return undefined
-          if (state.config.hooks.prometheusGuard && writeScopes(runtime.agentId)) {
-            if (!pathAllowedFor(runtime.agentId, file, state.cwd)) {
-              return `OMD write scope: ${runtime.agentId} may only write inside ${writeScopes(runtime.agentId).join(', ')}.`
+          if (state.config.hooks.prometheusGuard && writeScopes(state.role)) {
+            if (!pathAllowedFor(state.role, file, state.cwd)) {
+              return `OMD write scope: ${state.role} may only write inside ${writeScopes(state.role).join(', ')}.`
             }
           }
           if (state.config.hooks.notepadGuard && isNotepadPath(state.cwd, file)) {
@@ -153,7 +187,7 @@ export async function installAgentHooks(runtime, agent, state) {
         agent.ctx.on('agent/request', async (_payload, next) => {
           const base = await next()
           if (!state.config.hooks.modelRouting) return base
-          const route = routeFor(state.config, { agentId: runtime.agentId })
+          const route = routeFor(state.config, { agentId: state.role })
           if (!Object.keys(route).length) return base
           const out = { ...base }
           if (route.provider) out.provider = route.provider
@@ -180,7 +214,7 @@ export async function installAgentHooks(runtime, agent, state) {
           state.modeText = await loadModePrompt(mode)
           state.continuationRounds = 0
           state.stopped = false
-          await runtime.ledger(state.cwd, { event: 'keyword-mode', mode, agent: runtime.agentId })
+          await runtime.ledger(state.cwd, { event: 'keyword-mode', mode, agent: state.role })
         }),
       )
 
@@ -214,7 +248,7 @@ export async function installAgentHooks(runtime, agent, state) {
             event: 'continuation',
             mode,
             round: state.continuationRounds,
-            agent: runtime.agentId,
+            agent: state.role,
           })
           agent.steer({
             content: [{ type: 'text', text: continuationText(state, { plan, tasks: taskSummary }) }],

@@ -287,29 +287,22 @@ test('the plugin section reports the row language and generates the exact profil
   })
   assert.equal(languageInfo(undefined).value, 'en')
 
-  const presetText = await fs.readFile(path.join(root, 'presets', 'omd-sisyphus.patch.yml'), 'utf8')
-  const snippet = buildLanguageSnippet({ presetPatchText: presetText, agentId: 'sisyphus', language: 'zh' })
-  assert.equal(snippet.rowId, 'preset-omd-sisyphus')
-  assert.equal(snippet.presetFile, 'presets/omd-sisyphus.patch.yml')
-  assert.match(snippet.text, /^- id: preset-omd-sisyphus$/m)
-  assert.match(snippet.text, /^  name: "@deepseek-ai\/dsh-agent-preset"$/m)
+  // The runtime is one top-level row now, so the override is that row plus the
+  // one key it carries; there is no nested preset row left to restate.
+  const snippet = buildLanguageSnippet({ language: 'zh' })
+  assert.equal(snippet.rowId, 'omd-runtime')
+  assert.equal(snippet.presetFile, 'presets/omd-runtime.patch.yml')
+  assert.match(snippet.text, /^- id: omd-runtime$/m)
   assert.match(snippet.text, /^  config:$/m)
-  assert.match(snippet.text, /^\s+- id: omd$/m, 'the restated config keeps the runtime row')
-  // The runtime row's specifier is the package name, which a release rename
-  // changes; derive it rather than pinning the pre-rename value.
+  assert.match(snippet.text, /^\s+language: "zh"$/m)
+  // The row's specifier is the package name, which a release rename changes;
+  // derive it rather than pinning the pre-rename value.
   const pkgName = JSON.parse(readFileSync(path.join(root, 'package.json'), 'utf8')).name
   const rowLine = `name: ${JSON.stringify(pkgName)}`
   assert.ok(
     snippet.text.split('\n').some((line) => line.trim() === rowLine),
-    `the restated config keeps the runtime row (${rowLine})`,
+    `the override names the runtime package (${rowLine})`,
   )
-  const lines = snippet.text.split('\n')
-  const agentLine = lines.findIndex((line) => /^\s+agent: "sisyphus"$/.test(line))
-  assert.ok(agentLine > 0, 'the omd row keeps its agent key')
-  assert.match(lines[agentLine + 1], /^\s+language: "zh"$/, 'language is added to the omd row config')
-
-  const fallback = buildLanguageSnippet({ presetPatchText: null, agentId: 'oracle', language: 'en' })
-  assert.equal(fallback.text, null)
 })
 
 test('the routing tiers resolve per category and name their source', () => {

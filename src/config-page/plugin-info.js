@@ -14,16 +14,26 @@
  * deep-merges, so the row must restate its whole config.
  */
 import path from 'node:path'
+import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
-import { readTextSafe } from '../core/atomic.js'
 import { DEFAULT_CATEGORIES } from '../core/defaults.js'
 import { isPlainObject, routeFor } from '../core/config.js'
-import { presetIdFor } from '../agents/registry.js'
 
 /** Kept in sync with `LANGUAGES` in `src/i18n/messages.js`; read-only display. */
 export const SUPPORTED_LANGUAGES = ['en', 'zh']
 
 const DEFAULT_PACKAGE_ROOT = fileURLToPath(new URL('../../', import.meta.url))
+
+/** The generated top-level row that mounts the OMD runtime for the profile. */
+export const RUNTIME_ROW_ID = 'omd-runtime'
+
+/**
+ * The module specifier that row uses, read from the package itself so a release
+ * rename cannot leave the snippet naming a package that no longer resolves.
+ */
+const RUNTIME_PACKAGE = JSON.parse(
+  readFileSync(path.join(DEFAULT_PACKAGE_ROOT, 'package.json'), 'utf8'),
+).name
 
 /** Describe the effective row language beside the values this build supports. */
 export function languageInfo(language) {
@@ -57,113 +67,53 @@ export function routingTiers(config) {
 }
 
 /**
- * Pull the preset row's `config:` block out of a shipped patch file.
- * @param patchText - the shipped patch file.
- * @param parentIndent - indentation the block's parent key gets in the snippet.
- * @returns `{rowId, block}` with the block re-indented under its new parent.
+ * The exact profile patch a user pastes to set the OMD row language.
+ *
+ * `language` used to live on the `omd` row nested inside one preset, so the
+ * snippet had to restate that preset's whole config. The runtime is one
+ * top-level row now, and `language` is its only configurable key, so the
+ * snippet is the row itself.
+ * @returns `{text, rowId, presetFile}`.
  */
-export function extractConfigBlock(patchText, parentIndent = 2) {
-  const lines = String(patchText).replace(/\r\n/g, '\n').split('\n')
-  const configIndex = lines.findIndex((line) => /^\s*config:\s*$/.test(line))
-  if (configIndex === -1) return null
-  const indent = /^(\s*)/.exec(lines[configIndex])[1]
-  const drop = Math.max(0, indent.length - parentIndent)
-  const rowLine = lines.find((line) => /^\s*-\s*id:\s*\S+/.test(line) || /^\s*id:\s*\S+/.test(line))
-  const rowId = rowLine === undefined ? null : (/id:\s*(\S+)/.exec(rowLine)?.[1] ?? null)
-  let end = configIndex + 1
-  while (end < lines.length) {
-    const line = lines[end]
-    if (line.trim() === '') {
-      end += 1
-      continue
-    }
-    const leading = /^(\s*)/.exec(line)[1]
-    if (leading.length > indent.length) {
-      end += 1
-      continue
-    }
-    break
-  }
-  const block = lines
-    .slice(configIndex + 1, end)
-    .filter((line, index, all) => !(line.trim() === '' && index === all.length - 1))
-    .map((line) => (drop === 0 || line.length < drop || line.slice(0, drop).trim() !== '' ? line : line.slice(drop)))
-  return block.length === 0 ? null : { rowId, block }
-}
-
-/**
- * Add `language` to the `omd` child row inside an extracted config block.
- * @returns the block text with the key inserted at the child's own indentation.
- */
-export function injectLanguage(block, language) {
-  const lines = [...block]
-  let target = -1
-  let indent = ''
-  for (let index = lines.length - 1; index >= 0; index -= 1) {
-    const match = /^(\s*)agent:\s*["']?[\w-]+["']?\s*$/.exec(lines[index])
-    if (match === null) continue
-    target = index
-    indent = match[1]
-    break
-  }
-  if (target === -1) return block
-  lines.splice(target + 1, 0, `${indent}language: ${JSON.stringify(language)}`)
-  return lines.join('\n')
-}
-
-/**
- * The exact profile patch a user pastes to change this preset's row language.
- * @returns `{text, rowId, presetFile}`; `text` is null when the shipped preset
- *   patch could not be read, so the page can omit the snippet.
- */
-export function buildLanguageSnippet({ presetPatchText, agentId, language, profileDir = null }) {
-  const extracted = presetPatchText === null || presetPatchText === undefined ? null : extractConfigBlock(presetPatchText)
-  if (extracted === null) return { text: null, rowId: null, presetFile: null }
-  const rowId = extracted.rowId ?? `preset-${presetIdFor(agentId)}`
-  const block = injectLanguage(extracted.block, language)
+export function buildLanguageSnippet({ language, profileDir = null } = {}) {
   const target = profileDir === null ? '<your DSH profile>/cordis.patch.yml' : path.join(profileDir, 'cordis.patch.yml')
   const text = [
     `# Paste into ${target}`,
     '#',
     '# A Loader patch replaces `config` wholesale (it never deep-merges), so this',
-    '# restates the preset row\'s own config and adds `language` to its omd row.',
-    `- id: ${rowId}`,
-    '  name: "@deepseek-ai/dsh-agent-preset"',
+    "# restates the runtime row's own config and adds `language`.",
+    `- id: ${RUNTIME_ROW_ID}`,
+    `  name: ${JSON.stringify(RUNTIME_PACKAGE)}`,
     '  config:',
-    block,
+    `    language: ${JSON.stringify(language)}`,
     '',
   ].join('\n')
-  return { text, rowId, presetFile: `presets/${presetIdFor(agentId)}.patch.yml` }
+  return { text, rowId: RUNTIME_ROW_ID, presetFile: `presets/${RUNTIME_ROW_ID}.patch.yml` }
 }
 
 /**
  * Assemble everything the page shows in its read-only Plugin section.
  * @param options.config - effective workspace configuration (for the tiers).
  * @param options.language - the runtime's effective row language.
- * @param options.agentId - OMD agent id (`sisyphus`, ...) naming the preset row.
+ * @param options.role - the OMD role this session resolved to, or null for the
+ *   capability-only identity.
  */
 export async function buildPluginSection({
   config,
   language,
-  agentId,
+  role = null,
   packageRoot = DEFAULT_PACKAGE_ROOT,
   profileDir = process.env.DSH_PROFILE_DIR ?? null,
 } = {}) {
-  const presetFile = path.join(packageRoot, 'presets', `${presetIdFor(agentId)}.patch.yml`)
-  const presetRead = await readTextSafe(presetFile)
-  const snippet = buildLanguageSnippet({
-    presetPatchText: presetRead.ok ? presetRead.value : null,
-    agentId,
-    language: languageInfo(language).value,
-    profileDir,
-  })
+  const snippet = buildLanguageSnippet({ language: languageInfo(language).value, profileDir })
   return {
     compositionTime: true,
     language: languageInfo(language),
+    role,
     tiers: routingTiers(config),
     snippet: snippet.text,
     snippetFrom: snippet.presetFile,
-    presetRowId: snippet.rowId ?? `preset-${presetIdFor(agentId)}`,
+    presetRowId: snippet.rowId,
     profileDir,
     note:
       'language is a plugin-row Config value: it is read when the profile composes, so it is shown read-only with the exact cordis.patch.yml override. ' +

@@ -48,10 +48,14 @@ Or from a terminal:
 dsh plugin --profile <profile> add E:\Oh-My-DSH
 ```
 
-The install adds **only** eleven `agent-preset` declarations. It does not add
-global tools, commands, hooks, or a default preset. Standard sessions are
-unchanged. If the app was already running, restart it once before selecting an
-OMD preset so the current runtime module generation is loaded.
+The install adds eleven `agent-preset` declarations plus one top-level runtime
+row, `omd-runtime`, generated into `presets/omd-runtime.patch.yml`. That single
+row is what carries the tools, commands, skills, and hooks, so OMD orchestration
+is available in **every** preset — including the shipped `standard`. The OMD
+role is read from the active preset id: select an OMD preset for a persona, or
+keep any other preset and get the capability-only identity. If the app was
+already running, restart it once so the current runtime module generation is
+loaded.
 
 ### Language
 
@@ -61,9 +65,10 @@ concern, not an install-time flag. The complete description lives in
 
 ## Use
 
-1. Start a **new session** and select one of the OMD presets, for example
-   **Sisyphus · OMD**. Presets are chosen before the first turn.
-2. Run `/omd-init` to create `.omd/`.
+1. Run `/omd-init` to create `.omd/`. This works in any preset.
+2. Optionally select an OMD preset — for example **Sisyphus · OMD** — to also
+   get that role's persona and tool policy. Presets are chosen before the first
+   turn. Without one you keep your preset and run capability-only.
 3. Run the `omd-doctor` skill to verify the composition.
 4. Use `/omd-ulw <goal>`, `/omd-plan <goal>`, `/omd-start-work`, or just ask.
 
@@ -105,13 +110,18 @@ routing tiers with their source. See `docs/configuration.md`.
 `omd_session_search`, `omd_task_*` (opt-in), `omd_notepad`, `omd_lsp`,
 `omd_diagnostics`, `omd_look_at`, `omd_mode`, `omd_status`, `omd_doctor`.
 
-## Zero intrusion
+## Where OMD lives
 
-- OMD tools/commands/hooks/skills exist only inside OMD presets.
-- Installing the bundle changes no default preset and writes nothing to
-  `.omd/` until an OMD session uses a command or tool.
-- Keyword activation (`ulw`, `team`, `hyperplan`) is on inside OMD presets and
-  can be disabled in `.omd/config.jsonc`.
+- The runtime is mounted once, at the profile's top level, so OMD
+  tools/commands/hooks/skills and the `.omd/` layout are reachable from every
+  preset. The former "zero intrusion" guarantee is retired.
+- Installing the bundle changes no default preset. `.omd/` is written only when
+  a session actually uses an OMD command, tool, or the keyword hook.
+- The role (persona, tool policy, write scopes, skill set) comes from the active
+  preset id; a preset that is not an OMD one runs capability-only, with no
+  persona injected and no role restriction.
+- Keyword activation (`ulw`, `team`, `hyperplan`) is on everywhere and can be
+  disabled in `.omd/config.jsonc`.
 
 ## Verify
 

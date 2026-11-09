@@ -1,7 +1,13 @@
 # Tools
 
-All OMD tools exist only inside OMD presets. Read-only roles do not receive
-`omd_delegate`; write scopes are enforced by a guard.
+Every OMD tool is registered once, by the profile-level `omd-runtime` row, so
+the tool surface exists in every preset, including the shipped `standard`,
+`ptc`, `minimal`, and `cordis`. What differs is the resolved role: on an
+`omd-<role>` preset that role's tool policy applies, so read-only roles do not
+receive `omd_delegate` and write scopes are enforced by a guard; on any other
+preset the session is capability-only, with orchestration available, no OMD
+persona injected, and no role restriction applied. The exact tool list a
+capability-only session sees is to be verified by the probe.
 
 ## omd_delegate
 

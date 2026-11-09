@@ -40,9 +40,11 @@ and command names are checked here. Visual rendering stays a manual gate.
 
 `check.mjs` asserts:
 
-- `package.json` version, private flag, `dsh.bundle.patch` has 11 entries;
-- every patch exists and declares `preset-omd-*`;
-- every preset includes exactly one runtime row named after this package;
+- `package.json` version, private flag, `dsh.bundle.patch` lists every patch the
+  bundle installs;
+- every patch exists; the eleven preset patches declare `preset-omd-*`;
+- no preset patch declares the runtime row: it is declared once at profile level
+  in `presets/omd-runtime.patch.yml`;
 - 11 agent prompts, 15 skills, schema, locale, icon, LICENSE, NOTICE, lock;
 - every `.js`/`.mjs` parses;
 - presets are in sync with the generator;
@@ -59,7 +61,8 @@ appears in `docs/parity-omo-4.19.4.md`.
    eleven `preset-omd-*` entries.
 3. In a new session with an OMD preset, the `omd-doctor` skill reports no FAIL.
 4. Smoke: `/omd-init`, `/omd-ulw`, `/omd-status`, `/omd-handoff`.
-5. Standard preset session has no OMD tools/commands and no `.omd` writes.
+5. Standard preset session has the OMD tools and commands and resolves to
+   capability-only (no OMD persona); OMD is no longer scoped to OMD presets.
 
 ## Evidence standard
 

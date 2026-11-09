@@ -4,8 +4,8 @@
  * It renders nothing and registers nothing. Its whole purpose is to be a row
  * the Loader mounts directly, because the client-modules scan only composes
  * browser bundles for Loader entries it can resolve by package specifier. The
- * runtime row inside an agent preset is instantiated by the preset plugin, so
- * its package never appears in that scan; this row does.
+ * runtime row names `@jhcai11/oh-my-dsh`, which declares no `dsh.client`, so the
+ * scan finds no browser half there; this row, naming its own package, does.
  *
  * The 0.1.0 runtime shipped the rendering in the bundle root `dsh.client`
  * declaration, which never reached the browser: the live

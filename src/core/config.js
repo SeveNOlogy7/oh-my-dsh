@@ -2,7 +2,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { readTextSafe } from './atomic.js'
 import { parseJsonc } from './jsonc.js'
-import { DEFAULT_CATEGORIES, DEFAULT_CONFIG, DEFAULT_AGENT_SETTINGS, TOP_LEVEL_KEYS } from './defaults.js'
+import { DEFAULT_CATEGORIES, DEFAULT_CONFIG, DEFAULT_AGENT_SETTINGS, NEUTRAL_AGENT_SETTINGS, TOP_LEVEL_KEYS } from './defaults.js'
 
 const BLOCKED_KEYS = new Set(['__proto__', 'prototype', 'constructor'])
 
@@ -156,8 +156,12 @@ function nonNegativeInt(value, fallback) {
 }
 
 export function agentSettings(config, id) {
-  const base = DEFAULT_AGENT_SETTINGS[id] ?? DEFAULT_AGENT_SETTINGS.sisyphus
-  return { ...base, ...(isPlainObject(config?.agents?.[id]) ? config.agents[id] : {}) }
+  // `id == null` is the capability-only identity, which has no registry entry.
+  // It must resolve to the neutral settings rather than to whichever role a
+  // lookup miss happens to land on.
+  const base = (id == null ? undefined : DEFAULT_AGENT_SETTINGS[id]) ?? NEUTRAL_AGENT_SETTINGS
+  const override = id == null ? undefined : config?.agents?.[id]
+  return { ...base, ...(isPlainObject(override) ? override : {}) }
 }
 
 export function categorySettings(config, name) {

@@ -1,6 +1,9 @@
 # Commands
 
-Commands are scoped to OMD presets. The harness's own `/goal` stays available.
+OMD registers its commands once, at profile level, so every preset sees them,
+including the shipped `standard`, `ptc`, `minimal`, and `cordis`. The command
+set is the same everywhere; only the resolved role's policy differs. The
+harness's own `/goal` stays available.
 
 | Command | Input | Behavior |
 |---|---|---|
@@ -48,4 +51,5 @@ and the file is left byte-identical. The settings page
 `ctx.remote.commands.execute`, which is why it needs a live OMD session.
 
 Read-only subagent presets expose only `omd-init`, `omd-status`, `omd-config`,
-`omd-handoff`, and `omd-stop-continuation`.
+`omd-handoff`, and `omd-stop-continuation`. A session on any other preset
+resolves to capability-only and is not restricted this way.

@@ -430,6 +430,9 @@ possible failures.
    no reply row should appear.
 4. Run a short smoke such as `/omd-ulw add one line to README`.
 5. Confirm a standard session has no `omd_*` tools or `/omd-*` commands.
+   *Superseded for v0.1.3:* the runtime row moved to profile level, so a
+   standard session now has both and resolves to capability-only. See
+   "Global runtime row and capability-only identity (2026-11-09)" below.
 
 The desktop profile cannot be dumped with the CLI (`managed exclusively by the
 Electron application`), so step 5 is intentionally a user-visible check.
@@ -443,4 +446,86 @@ The transcripts above were recorded on 2026-11-04, when the doctor was the
 the `omd-doctor` skill driving the `omd_doctor` tool, and `/omd-doctor` no
 longer exists. Wherever an earlier section says to run `/omd-doctor`, run the
 skill instead, and expect the report as a tool result rather than a command row.
+
+## Global runtime row and capability-only identity (2026-11-09)
+
+This section records the v0.1.3 change and the state of its verification. It
+supersedes the zero-intrusion expectation wherever an earlier section states it;
+those sections are left exactly as recorded.
+
+The plugin row moved out of the presets. `@jhcai11/oh-my-dsh` used to be
+declared as an `omd` row inside each of the eleven preset patches. It is now
+declared once at profile top level, by the generated
+`presets/omd-runtime.patch.yml`:
+
+```yaml
+- insert:
+    - id: omd-runtime
+      name: "@jhcai11/oh-my-dsh"
+```
+
+Two consequences follow.
+
+1. OMD's capability surface — the `omd_*` tools, the `/omd-*` commands, the
+   `omd-*` skills, the keyword→mode hook, ultrawork continuation, and `.omd/`
+   durable state — is available in every preset, including the shipped
+   `standard`, `ptc`, `minimal`, and `cordis`. The old zero-intrusion guarantee
+   (a standard session with no OMD surface and no `.omd/` directory) is retired.
+2. The OMD role is resolved lazily, at request time, from the session's active
+   preset. An `omd-<role>` preset selects that role's persona prompt, tool
+   policy, write scopes, and skill set. Any other preset resolves to
+   capability-only: orchestration is available, no OMD persona is injected, and
+   no role restriction is applied.
+
+The seven subagent presets keep their registered rows and stay visible in the
+picker for the reasons recorded under "Preset picker: no hidden presets" above:
+`omd_delegate` mounts a child by preset id (`agentPreset: omd-<target>`), DSH's
+preset declaration schema exposes only id/name/description/order/plugins, and
+`AgentPresetRegistry.list()` returns every registered preset. Their descriptions
+keep the shared "Delegation target" marker.
+
+### Verification status of this change
+
+Measured on the working tree on 2026-11-09.
+
+The probe was changed to drive the real picker path,
+`ctx.agentPresets.select(agent, preset)`: that call both recomposes the Agent and
+appends `agent-preset/selected` to the session, which is what a top-level runtime
+row resolves its role from. Mounting a preset directly in
+`ctx.agents.create({ setup })` is not the production path — `createAgent` accepts
+`{sessionId, seed, meta, inheritedEventCount, agentOptions, setup, signal,
+parentAgent}` and has no `agentPreset` option — so such a session carries no
+preset, correctly reads as capability-only, and cannot measure a role at all.
+
+The probe recorded the visible tool set for all twelve presets, before and after
+the selection:
+
+| Preset | `omd_*` tools | write/edit | `omd_delegate` |
+|---|---|---|---|
+| `standard` (shipped, not OMD) | 14 | yes | yes |
+| `omd-sisyphus`, `omd-hephaestus`, `omd-prometheus` | 14 | yes | yes |
+| `omd-atlas` | 14 | no | yes |
+| `omd-oracle`, `omd-librarian`, `omd-explore`, `omd-metis`, `omd-momus` | 9 | no | no |
+| `omd-multimodal-looker` | 1 | no | no |
+| `omd-sisyphus-junior` | 9 | yes | no |
+
+A shipped, non-OMD preset therefore sees the whole orchestration surface, and the
+eleven OMD presets keep the tool sets the earlier table records. The 14 excludes
+`omd_task_*`, which the policy hook denies while `taskSystem.enabled` is false,
+and `omd_lsp`, which needs an LSP service this probe composition does not mount.
+`omd_look_at` is among the 14 for the four delegating roles and absent for the
+rest, the same policy that hides `omd_delegate` from them.
+
+Also measured in the same pass: `npm test` passes 84 tests, and `npm run check`,
+`npm run check:presets`, `npm run check:parity`, and `npm run check:version` all
+exit 0.
+
+Not measured: no model request was made, so the injected system-prompt sections
+were never observed live. The persona is a section whose `text` is a function, and
+DSH evaluates a function section per assembly, so the lazy read is held by the
+unit tests rather than by this probe.
+
+Host caveat: the probe ran against the CLI `dsh` 0.2.1-rc.5. The desktop
+application bundles a newer host, so the same behavior there is not yet measured;
+re-run the probe after the desktop profile installs this revision.
 

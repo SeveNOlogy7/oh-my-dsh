@@ -60,7 +60,7 @@ itself must change first.
    all eleven presets mounting a module that cannot resolve. The bare name is
    not a safe fallback either: the unrelated, unmaintained `oh-my-dsh` package
    that occupies that name on npm could be resolved instead. The rename
-   rewrites the twelve patch files under `presets/`; commit them together with
+   rewrites every patch file under `presets/`; commit them together with
    the manifest.
 
    The `private` assertions in `scripts/check.mjs` and

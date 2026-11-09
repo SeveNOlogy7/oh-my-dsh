@@ -1,8 +1,10 @@
 # The .omd directory
 
 `.omd/` is the durable orchestration state. It is created by `/omd-init` or
-lazily by the first state write. The session log remains the conversation
-source of truth.
+lazily by the first state write. Because OMD is mounted once at profile level,
+any session can create it, including a session on a shipped preset such as
+`standard`; the directory is not limited to sessions running an OMD persona. The
+session log remains the conversation source of truth.
 
 ```
 .omd/

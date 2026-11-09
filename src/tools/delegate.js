@@ -116,11 +116,11 @@ export function createDelegateTools(runtime) {
         const parent = requireAgent(exec)
         const state = await runtime.stateFor(parent)
         const settings = state.settings
-        if (!canDelegate(runtime.agentId, settings)) throw new Error(`${runtime.agentId} cannot delegate`)
+        if (!canDelegate(state.role, settings)) throw new Error(`${state.role ?? 'this session'} cannot delegate`)
         if (args.subagent_type && args.category) throw new Error('pass exactly one of subagent_type or category')
         if (!args.subagent_type && !args.category) throw new Error('pass subagent_type or category')
-        if (args.subagent_type && !isSubagentAllowed(runtime.agentId, args.subagent_type, state.config)) {
-          throw new Error(`${runtime.agentId} is not allowed to delegate to ${args.subagent_type}`)
+        if (args.subagent_type && !isSubagentAllowed(state.role, args.subagent_type, state.config)) {
+          throw new Error(`${state.role ?? 'this session'} is not allowed to delegate to ${args.subagent_type}`)
         }
         if (args.category && !isCategory(args.category, state.config)) {
           throw new Error(`unknown category: ${args.category}`)

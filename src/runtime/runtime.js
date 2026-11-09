@@ -1,6 +1,6 @@
 import os from 'node:os'
 import { loadConfig, agentSettings } from '../core/config.js'
-import { AGENTS, canDelegate, isReadOnly, skillsFor } from '../agents/registry.js'
+import { AGENTS, canDelegate, isReadOnly, skillsFor, agentIdFromPreset } from '../agents/registry.js'
 import { loadAgentPrompt, loadModePrompt } from '../agents/prompts.js'
 import { safeStem } from '../core/paths.js'
 import { appendJsonl, writeJsonAtomic } from '../core/atomic.js'
@@ -16,9 +16,19 @@ export class Runtime {
   constructor(ctx, config = {}) {
     this.ctx = ctx
     this.config = config
-    this.agentId = config.agent
-    if (!AGENTS[this.agentId]) throw new Error(`unknown OMD agent: ${String(config.agent)}`)
-    this.definition = AGENTS[this.agentId]
+    // A row that names `agent` mounts one fixed OMD role: the legacy layout,
+    // where the row sits inside one OMD preset and that preset *is* the role.
+    // A row that omits `agent` is the global capability row. It mounts once for
+    // the whole profile, so the role cannot be a construction fact any more; it
+    // is resolved per session from the active preset, and a session running a
+    // non-OMD preset gets the capability-only identity (`null`).
+    this.configuredAgent = config.agent ?? null
+    if (this.configuredAgent !== null && !AGENTS[this.configuredAgent]) {
+      throw new Error(`unknown OMD agent: ${String(config.agent)}`)
+    }
+    this.global = this.configuredAgent === null
+    this.agentId = this.configuredAgent
+    this.definition = this.configuredAgent === null ? null : AGENTS[this.configuredAgent]
     // The plugin row's `language` key selects the description language the
     // model reads. Anything unsupported or absent degrades to English.
     this.language = normalizeLanguage(config.language)
@@ -30,11 +40,37 @@ export class Runtime {
   }
 
   get canDelegate() {
+    // Globally mounted, every tool is registered and the per-agent policy hook
+    // decides what each resolved role may actually see.
+    if (this.global) return true
     return canDelegate(this.agentId)
   }
 
   get isReadOnly() {
+    if (this.global) return false
     return isReadOnly(this.agentId)
+  }
+
+  /**
+   * The OMD role this agent runs as, or `null` for capability-only.
+   *
+   * A row with a configured agent answers immediately; the global row asks the
+   * session, which is why this is async. It is the single reader of the role,
+   * so every other module can stay synchronous off `state.role`.
+   */
+  async roleFor(agent) {
+    if (!this.global) return this.configuredAgent
+    const state = await this.stateFor(agent)
+    return state.role
+  }
+
+  /** Persona text for a role, honouring the per-role `promptAppend` override. */
+  async personaFor(role, config) {
+    const settings = agentSettings(config, role)
+    const base = role ? await loadAgentPrompt(role) : ''
+    if (!settings.promptAppend) return { personaText: base, settings }
+    const appended = `## User append\n\n${settings.promptAppend}`
+    return { personaText: base ? `${base}\n\n${appended}` : appended, settings }
   }
 
   async stateFor(agent) {
@@ -62,9 +98,11 @@ export class Runtime {
       // keep process cwd
     }
     const loaded = await loadConfig({ workspace: cwd, home: os.homedir() })
-    const settings = agentSettings(loaded.config, this.agentId)
-    let prompt = await loadAgentPrompt(this.agentId)
-    if (settings.promptAppend) prompt = `${prompt}\n\n## User append\n\n${settings.promptAppend}`
+    // The header is a creation fact and reads `standard` for every interactive
+    // session, so the picker choice is read through the session projection.
+    const preset = this.configuredAgent ?? (await resolveActivePreset(this.ctx, agent))
+    const role = this.configuredAgent ?? agentIdFromPreset(preset)
+    const { personaText, settings } = await this.personaFor(role, loaded.config)
     const stem = safeStem(agent.id)
     const mode = await readMode(cwd, stem)
     this.scheduler.setLimit(loaded.config.delegation.maxConcurrent)
@@ -72,10 +110,12 @@ export class Runtime {
       ready: true,
       agent,
       cwd,
+      preset,
+      role,
       config: loaded.config,
       diagnostics: loaded.diagnostics,
       settings,
-      prompt,
+      personaText,
       stem,
       mode,
       modeText: '',
@@ -84,6 +124,32 @@ export class Runtime {
       stopped: false,
       dispose: null,
     }
+  }
+
+  /**
+   * Re-resolve the role after the picker changes the preset.
+   *
+   * A globally mounted row is created before the session's preset is known, so
+   * the first resolution happens too early by construction. Returns whether
+   * anything changed, which is what the policy hook uses to decide whether to
+   * re-apply the tool restriction.
+   *
+   * `presetHint` is the `agent-preset/selected` payload. It is authoritative
+   * and is preferred over re-reading the session log, which would be a
+   * redundant round trip that can also lag the event it is reacting to.
+   */
+  async refreshRole(agent, presetHint = undefined) {
+    if (!this.global) return false
+    const state = await this.stateFor(agent)
+    const preset = presetHint ?? (await resolveActivePreset(this.ctx, agent))
+    const role = agentIdFromPreset(preset)
+    state.preset = preset ?? null
+    if (role === state.role) return false
+    const { personaText, settings } = await this.personaFor(role, state.config)
+    state.role = role
+    state.personaText = personaText
+    state.settings = settings
+    return true
   }
 
   async refreshMode(state) {
@@ -131,8 +197,9 @@ export class Runtime {
           await writeJsonAtomic(omdPath(state.cwd, 'debug-tools.json'), {
             at: new Date().toISOString(),
             agent_id: agent.id,
-            runtime: this.agentId,
-            preset: (await resolveActivePreset(this.ctx, agent)) ?? null,
+            runtime: this.configuredAgent,
+            role: state.role,
+            preset: state.preset ?? null,
             cwd: state.cwd,
             tools,
             sections: ['deployment:persona-prefix', 'omd:rules', 'omd:mode'],
@@ -209,6 +276,6 @@ export class Runtime {
   }
 
   skillNames() {
-    return skillsFor(this.agentId, {})
+    return skillsFor(this.configuredAgent, {})
   }
 }

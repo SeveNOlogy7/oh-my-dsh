@@ -403,10 +403,10 @@ export function createCommands(runtime) {
       try {
         const result =
           parsed.kind === 'read'
-            ? await configPage.read({ workspace: state.cwd, agentId: runtime.agentId, language: runtime.language })
+            ? await configPage.read({ workspace: state.cwd, agentId: state.role, language: runtime.language })
             : await configPage.set({
                 workspace: state.cwd,
-                agentId: runtime.agentId,
+                agentId: state.role,
                 language: runtime.language,
                 patch: parsed.patch,
               })
@@ -420,6 +420,10 @@ export function createCommands(runtime) {
     },
   })
 
+  // A globally mounted row serves every preset, so it registers the whole
+  // command surface and lets the per-agent policy decide what is usable. The
+  // legacy per-preset row keeps its narrower, role-filtered set.
+  if (runtime.global) return commands
   if (!['sisyphus', 'hephaestus', 'prometheus', 'atlas'].includes(runtime.agentId)) {
     return commands.filter((command) =>
       ['omd-init', 'omd-status', 'omd-config', 'omd-handoff', 'omd-stop-continuation'].includes(command.name),
