@@ -225,9 +225,9 @@ READMEs there are **generated** from `data/`, and hand edits are overwritten.
 url: https://github.com/SeveNOlogy7/oh-my-dsh
 name: SeveNOlogy7/oh-my-dsh
 category: workflow
-description.en: Agent orchestration for DeepSeek Harness with eleven selectable presets.
-description.zh: 面向 DeepSeek Harness 的智能体编排插件，提供 11 个可选 preset。
-icon: https://raw.githubusercontent.com/SeveNOlogy7/oh-my-dsh/main/icon.svg
+description:
+  en: Agent orchestration for DeepSeek Harness with eleven selectable presets, planning, delegation, review gates and durable project state.
+  zh: 面向 DeepSeek Harness 的智能体编排插件：11 个可选 preset、规划、委派、评审门与 .omd 持久状态。
 ```
 
 Field rules:
@@ -237,9 +237,16 @@ Field rules:
   casing is a mismatch.
 - `name` — required, the `owner/repo` form: `SeveNOlogy7/oh-my-dsh`.
 - `category` — required, `workflow` for this plugin.
-- `description.en` — required, **one line**, and it must end with a period.
-- `description.zh` — optional, same one-line rule.
-- `icon` — optional; the raw URL above points at the repository's `icon.svg`.
+- `description` — a mapping with `en` and `zh`; `en` is required, `zh` may be
+  left out for a maintainer to add. Each is **one line** ending with a period,
+  and a value containing a colon followed by a space must be quoted because YAML
+  would otherwise read it as a nested key. The nested form above is what the
+  catalog's own `contributing.md` documents; a flat `description.en:` key is not
+  the same field.
+- `icon` — optional, and it must be a GitHub-hosted **raster** image. This
+  repository ships `icon.svg`, which is the right format for the DSH plugin row
+  but **not** for the market tile, so the entry omits `icon` and the market falls
+  back to the owner's avatar.
 - Any scope rename in step 1 does **not** change the values here: `url` and
   `name` always describe the GitHub repository, not the npm package.
 
