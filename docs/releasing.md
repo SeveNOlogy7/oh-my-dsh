@@ -137,12 +137,32 @@ Once the package exists on npm, every later version is published by
 
 One-time binding, after step 2 has put the first version on the registry:
 
-1. On npmjs.com open the package → **Settings → Trusted Publisher** and add a
-   GitHub Actions publisher: owner `SeveNOlogy7`, repository `oh-my-dsh`,
-   workflow file `publish.yml`.
-2. Nothing else. The workflow's publish job holds `id-token: write`, so its
-   runner requests an OIDC token and npm exchanges it for a short-lived publish
-   credential.
+```
+npm trust github <scope>/oh-my-dsh \
+  --file publish.yml \
+  --repo SeveNOlogy7/oh-my-dsh \
+  --allow-publish
+```
+
+`npm trust` requires npm >= 11.15.0 and two-factor authentication enabled on the
+account, and the package must already exist on the registry — which is why step
+2 comes first. Omitting `--repo` takes `repository.url` from `package.json`,
+which already points here. The website equivalent is the package's
+**Settings → Trusted publishing** section, where the same values are entered as
+publisher GitHub Actions, organization/user `SeveNOlogy7`, repository
+`oh-my-dsh`, workflow filename `publish.yml`.
+
+Two operational details from the npm documentation:
+
+- A new trusted-publisher configuration must complete its **first successful
+  publish within two days**, or it expires and cannot be edited. Bind it when a
+  release is ready, not in advance.
+- Once it works, **Settings → Publishing access → "Require two-factor
+  authentication and disallow tokens"** removes the token path entirely; trusted
+  publishers keep working because they use OIDC.
+
+The workflow's publish job then holds `id-token: write`, so its runner requests
+an OIDC token and npm exchanges it for a short-lived publish credential.
 
 Releasing a version:
 
@@ -258,7 +278,8 @@ A PR for a plugin that is not on npm is rejected or left unlisted.
 - [ ] Working tree clean, on `main`.
 - [ ] `npm publish --access public` succeeded and `npm view` confirms it — the
       first version only; later versions are published by CI.
-- [ ] Trusted Publisher on npmjs.com names this repository and `publish.yml`.
+- [ ] Trusted Publisher bound with `npm trust github` (or the package's
+      Settings → Trusted publishing) and its first publish done within two days.
 - [ ] `v<version>` tag pushed and the publish workflow finished green.
 - [ ] The npm page shows the provenance attestation for the published version.
 - [ ] Market PR adds exactly `data/plugins/SeveNOlogy7__oh-my-dsh.yml`.
