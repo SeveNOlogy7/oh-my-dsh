@@ -1,4 +1,4 @@
-export const OMD_VERSION = '0.1.0'
+export const OMD_VERSION = '0.1.1'
 export const OMO_VERSION = '4.19.4'
 export const OMO_COMMIT = 'b072d279110bdda2c6ac2525d0d24dc54d16148a'
 export const OMD_DIR = '.omd'
