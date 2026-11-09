@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.1.1 — 2026-11-09
+
+### Added
+
+- The first version published from CI. `.github/workflows/publish.yml` builds
+  the `v0.1.1` tag on GitHub's runners, publishes it through npm Trusted
+  Publishing (OIDC, with no npm token stored in the repository) and attaches a
+  provenance attestation. Version 0.1.0 was published by hand, because a trusted
+  publisher cannot be bound before the package exists on the registry.
+
 ## Unreleased
 
 ### Added
