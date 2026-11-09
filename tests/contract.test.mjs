@@ -243,6 +243,18 @@ test('the Client asset is a top-level row the Loader scan can resolve', async ()
     ['conversation.chat.commandview', 'settings.section'],
     'client.js must inject each owned slot exactly once',
   )
+  // The Client context refuses a property access it was not injected with, and
+  // the failure only appears when the page is opened in a browser, so the list
+  // is asserted here: `remote.commands` is a separate declaration from `remote`,
+  // and omitting it broke the settings page with a runtime error.
+  // The plugin-level list is the only `inject: [...]` in the file; the slot
+  // registration's option is the `inject: () => ({...})` form.
+  const injectLiteral = /\binject: \[([^\]]*)\]/.exec(source)
+  assert.ok(injectLiteral, 'client.js must declare the services it injects')
+  const injectedServices = [...injectLiteral[1].matchAll(/'([^']+)'/g)].map((match) => match[1])
+  for (const service of ['slots', 'locale', 'sessions', 'remote', 'remote.commands']) {
+    assert.ok(injectedServices.includes(service), `client.js must inject ${service}`)
+  }
 
   const commandSource = await read('src/commands/index.js')
   const listLiteral = /const COMMANDS = \[([^\]]*)\]/.exec(source)

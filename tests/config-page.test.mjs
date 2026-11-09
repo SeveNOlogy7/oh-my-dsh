@@ -496,7 +496,10 @@ test('the client half registers its command cells and the settings section', asy
     if (specifier === 'react') return react.lib
     throw new Error(`unexpected require("${specifier}")`)
   })
-  assert.deepEqual(clientModule.inject, ['slots'])
+  // The Client context refuses a property access it was not injected with, so
+  // the list names every service the half reaches: `remote.commands` is a
+  // separate declaration from `remote` and omitting it broke the live page.
+  assert.deepEqual(clientModule.inject, ['slots', 'locale', 'sessions', 'remote', 'remote.commands'])
 
   const injectionKeys = []
   const registered = []

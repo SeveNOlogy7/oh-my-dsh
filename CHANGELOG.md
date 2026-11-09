@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.1.2 — 2026-11-09
+
+### Fixed
+
+- The settings page opened onto a red
+  `失败: cannot get property "remote.commands" without inject` banner instead of
+  a form. The asset's Client half declared only `slots` in `inject`, and the
+  Client context refuses a property access it was not injected with:
+  `remote.commands` needs its own declaration beside `remote`. The list now names
+  every service that half reaches — `slots`, `locale`, `sessions`, `remote`,
+  `remote.commands` — and `tests/contract.test.mjs` asserts it, because this
+  failure only appears when the page is opened in a browser.
+
 ## 0.1.1 — 2026-11-09
 
 ### Added

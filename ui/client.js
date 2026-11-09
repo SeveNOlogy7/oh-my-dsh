@@ -923,7 +923,14 @@ window.__ModuleLoader__.load({
     }
 
     return {
-      inject: ['slots'],
+      // The Client context refuses a property access it was not injected with,
+      // so every service this half reaches has to be declared here. `remote`
+      // covers the namespace object and `remote.commands` the method the page
+      // calls; without the latter, opening the settings page failed with
+      // "cannot get property 'remote.commands' without inject". `sessions`
+      // resolves the session the page configures, and `locale` carries the
+      // dictionary registered below.
+      inject: ['slots', 'locale', 'sessions', 'remote', 'remote.commands'],
       apply(ctx) {
         // One injection per slot key: the callback's registrations are disposed
         // with the declaration, and a per-key loop would install the same owner
