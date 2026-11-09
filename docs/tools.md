@@ -102,9 +102,9 @@ that every role, including the read-only ones, can run it.
 ## omd_ui_status
 
 Reports whether the Host composed the Oh-My-DSH browser bundle:
-`clientModules.clientPath('oh-my-dsh')`, the Web boot graph entries and batches,
-and the Loader rows whose name mentions `oh-my-dsh` with their `disabled` and
-fiber state. Use it when a command's output does not appear in the conversation:
+`clientModules.clientPath('omd-ui')` (the asset package), the Web boot graph
+entries and batches, and the Loader rows whose name mentions `omd-ui` or
+`oh-my-dsh` with their `disabled` and fiber state. Use it when a command's output does not appear in the conversation:
 `clientPath` returning `NOT REGISTERED` means the Host never composed the
 bundle, while a registered path means the bundle reached the browser and the
 renderer is what needs attention. Read-only; it changes nothing.

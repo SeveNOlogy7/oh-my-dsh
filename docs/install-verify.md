@@ -9,7 +9,7 @@ plugin_manager install_bundle  target: E:\Oh-My-DSH
 ```
 
 Expected: `application: applied`, `warnings: []`, and the profile
-`package.json` gains `"oh-my-dsh": "link:E:/Oh-My-DSH"` plus the bundle in
+`package.json` gains `"@jhcai11/oh-my-dsh": "link:E:/Oh-My-DSH"` plus the bundle in
 `dsh.profile.bundles`.
 
 If the app was already running when the bundle was first installed, **restart
@@ -25,7 +25,7 @@ dsh plugin --profile <profile> add E:\Oh-My-DSH
 
 ## Verify rows
 
-`plugin_manager list_bundles` shows `oh-my-dsh` with eleven rows
+`plugin_manager list_bundles` shows `@jhcai11/oh-my-dsh` with eleven rows
 `preset-omd-*`. `Config.listConfigs` filtered by
 `@deepseek-ai/dsh-agent-preset` shows the same eleven preset entries.
 
@@ -77,7 +77,7 @@ Start a **standard** preset session. It must have no `omd_*` tools, no
 ## Uninstall
 
 ```
-plugin_manager remove_bundle  target: oh-my-dsh
+plugin_manager remove_bundle  target: @jhcai11/oh-my-dsh
 ```
 
 This removes the preset declarations and the linked package. It does not delete

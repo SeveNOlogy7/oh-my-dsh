@@ -67,6 +67,6 @@
                   headChars: 4096
                   tailChars: 1024
           - id: omd
-            name: "oh-my-dsh"
+            name: "@jhcai11/oh-my-dsh"
             config:
               agent: "oracle"

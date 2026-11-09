@@ -18,25 +18,19 @@ Oh-My-DSH 安装 11 个可选择的 Agent preset，并把规划、访谈、委�
 
 ## 从 npm 安装
 
-> **包名待定（TBD）。** 裸名 `oh-my-dsh` 在 npm 上已被无关的旧包占用，因此本项目
-> 将以 scoped 名称发布。scope 尚未确定，下面的 `<scope>/oh-my-dsh` 只是占位符，
-> 现在还不能直接解析。
-
-scoped 包发布之后：
-
 ```
-npm install <scope>/oh-my-dsh
+npm install @jhcai11/oh-my-dsh
 ```
 
 或直接把 bundle 加进 DSH profile：
 
 ```
-dsh plugin --profile <profile> add <scope>/oh-my-dsh
+dsh plugin --profile <profile> add @jhcai11/oh-my-dsh
 ```
 
-目前公开仓库就是可用的分发渠道，因此下面的本地安装方式是当前有效路径。scoped
-改名、`npm login`、`npm publish --access public` 与市场收录的完整流程记录在
-[`docs/releasing.md`](docs/releasing.md)。
+裸名 `oh-my-dsh` 属于另一个无关的包，所以本项目使用 scope。scoped 改名、
+`npm publish --access public`、后续版本由 CI 带 provenance 发布，以及市场收录，
+完整流程记录在 [`docs/releasing.md`](docs/releasing.md)。
 
 ## 安装
 

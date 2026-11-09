@@ -19,27 +19,20 @@ port**: no upstream code or prompt text is copied. See `NOTICE` and
 
 ## Install from npm
 
-> **Package name pending (TBD).** The bare name `oh-my-dsh` is already taken on
-> the npm registry by an unrelated package, so this project will publish under a
-> scope. Until that scope is fixed, read `<scope>/oh-my-dsh` below as a
-> placeholder — do not expect it to resolve yet.
-
-Once the scoped package is published:
-
 ```
-npm install <scope>/oh-my-dsh
+npm install @jhcai11/oh-my-dsh
 ```
 
-or add the bundle straight to a DSH profile:
+or add the bundle straight into a DSH profile:
 
 ```
-dsh plugin --profile <profile> add <scope>/oh-my-dsh
+dsh plugin --profile <profile> add @jhcai11/oh-my-dsh
 ```
 
-Today the public repository is the working distribution channel; the checkout
-install below is current. [`docs/releasing.md`](docs/releasing.md) records the
-scoped rename, `npm login`, `npm publish --access public`, and the market
-submission as they happen.
+The bare name `oh-my-dsh` belongs to an unrelated package, which is why this one
+is scoped. [`docs/releasing.md`](docs/releasing.md) records the release path: the
+scoped rename, `npm publish --access public`, publishing later versions from CI
+with provenance, and the market submission.
 
 ## Install
 

@@ -42,7 +42,7 @@ and command names are checked here. Visual rendering stays a manual gate.
 
 - `package.json` version, private flag, `dsh.bundle.patch` has 11 entries;
 - every patch exists and declares `preset-omd-*`;
-- every preset includes exactly one `oh-my-dsh` runtime row;
+- every preset includes exactly one runtime row named after this package;
 - 11 agent prompts, 15 skills, schema, locale, icon, LICENSE, NOTICE, lock;
 - every `.js`/`.mjs` parses;
 - presets are in sync with the generator;

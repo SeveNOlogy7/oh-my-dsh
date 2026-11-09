@@ -21,6 +21,9 @@
 
 ### Changed
 
+- The package is published as `@jhcai11/oh-my-dsh`. The bare name `oh-my-dsh`
+  belongs to an unrelated package, so the eleven preset patches are regenerated
+  from the scoped name and their runtime row specifier follows it.
 - The doctor is a skill, not a command. `/omd-doctor` is gone; all eleven roles
   carry the `omd-doctor` skill, which drives the new `omd_doctor` tool. A
   diagnosis now arrives as a tool result the model reads and reports, so a FAIL,

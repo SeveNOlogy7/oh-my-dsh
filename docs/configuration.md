@@ -116,7 +116,7 @@ bundled skills' `description` and `whenToUse`. It accepts `en` (default) or
 
 ```yaml
 - id: omd
-  name: "oh-my-dsh"
+  name: "@jhcai11/oh-my-dsh"
   config:
     agent: "sisyphus"
     language: "zh"

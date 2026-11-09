@@ -21,7 +21,9 @@ async function exists(file) {
 
 const pkg = JSON.parse(await fs.readFile(path.join(root, 'package.json'), 'utf8'))
 if (pkg.version !== OMD_VERSION) note(`package version ${pkg.version} != ${OMD_VERSION}`)
-if (pkg.private !== true) note('package must be private')
+// Published, so `private` must be gone: npm refuses to publish a private
+// package. docs/releasing.md keeps the release path.
+if (pkg.private === true) note('package.json is private; npm publish would be refused')
 if (pkg.type !== 'module') note('package must be ESM')
 
 const patches = pkg.dsh?.bundle?.patch

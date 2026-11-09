@@ -7,17 +7,16 @@ Current state at the time of writing:
 
 - The public GitHub repository is
   <https://github.com/SeveNOlogy7/oh-my-dsh> (default branch `main`).
-- `package.json` still carries `"private": true` on purpose. GitHub-only
-  distribution works in that state; npm publishing does not.
-- The bare npm name `oh-my-dsh` is already taken by an unrelated, unmaintained
-  `0.1.7` package, so this project must publish under a **scope**, for example
-  `@your-scope/oh-my-dsh`. The final scope is a human decision; nothing in the
-  repository guesses it. Everywhere below, `<scope>` is a placeholder.
+- The package is published as `@jhcai11/oh-my-dsh`. The bare name `oh-my-dsh` is
+  taken by an unrelated, unmaintained `0.1.7` package, which is why a scope is
+  required; `publishConfig.access` is `"public"`, which a scoped package needs to
+  be publicly installable.
 - The preset patches under `presets/` embed this package's module specifier,
-  generated from `package.json`'s `name` by `scripts/generate-presets.mjs`.
-  They must be regenerated in the same commit as the rename; see step 3.
-- `publishConfig.access` is already `"public"`, which is required for a scoped
-  package to be publicly installable.
+  generated from `package.json`'s `name` by `scripts/generate-presets.mjs`, so a
+  rename always means regenerating them in the same commit. Step 1 keeps that
+  procedure for the next rename; it is already applied for the current name.
+- Later versions are published by `.github/workflows/publish.yml`; only the first
+  version needed a manual publish.
 
 ## 1. Prepare the scoped package name
 
@@ -39,7 +38,7 @@ itself must change first.
    `version`, `dsh`, `exports`, or `files` at this step:
 
    ```
-   npm pkg set name=@<scope>/oh-my-dsh
+   npm pkg set name=@jhcai11/oh-my-dsh
    npm pkg delete private
    ```
 
@@ -64,10 +63,11 @@ itself must change first.
    rewrites the twelve patch files under `presets/`; commit them together with
    the manifest.
 
-   The `private: true` assertion in `scripts/check.mjs` contradicts step 2, so
-   the same release commit updates that assertion. Until it is updated,
-   `npm run check` fails with `package must be private` — that failure is
-   expected after step 2 and must be fixed in the assertion, never by restoring
+   The `private` assertions in `scripts/check.mjs` and
+   `scripts/check-version.mjs` contradict step 2, so the same release commit
+   updates both. Until they are updated, `npm run check` fails with
+   `package.json is private; npm publish would be refused` — that failure is
+   expected after step 2 and must be fixed in the assertions, never by restoring
    `private`.
 
 4. Inspect the real tarball contents before publishing. The `files` allow-list
@@ -110,8 +110,8 @@ without it a scoped publish defaults to restricted.
 Verify the published artifact:
 
 ```
-npm view @<scope>/oh-my-dsh version
-npm view @<scope>/oh-my-dsh dist.tarball
+npm view @jhcai11/oh-my-dsh version
+npm view @jhcai11/oh-my-dsh dist.tarball
 ```
 
 Then record the release in git so the tag and the registry agree:
@@ -138,7 +138,7 @@ Once the package exists on npm, every later version is published by
 One-time binding, after step 2 has put the first version on the registry:
 
 ```
-npm trust github <scope>/oh-my-dsh \
+npm trust github @jhcai11/oh-my-dsh \
   --file publish.yml \
   --repo SeveNOlogy7/oh-my-dsh \
   --allow-publish
@@ -247,7 +247,7 @@ Field rules:
 
 The market index only lists plugins that are **published on npm with a known
 version**. Open the pull request **after** step 2 has succeeded and
-`npm view @<scope>/oh-my-dsh version` returns the version you just published.
+`npm view @jhcai11/oh-my-dsh version` returns the version you just published.
 A PR for a plugin that is not on npm is rejected or left unlisted.
 
 ### Opening the pull request
@@ -266,7 +266,7 @@ A PR for a plugin that is not on npm is rejected or left unlisted.
 ## Release checklist
 
 - [ ] `npm whoami` returns the expected account.
-- [ ] `package.json` has `name: @<scope>/oh-my-dsh` and no `private` field.
+- [ ] `package.json` has `name: @jhcai11/oh-my-dsh` and no `private` field.
 - [ ] `version`, `dsh`, `exports`, and `files` are unchanged by the rename.
 - [ ] `npm run generate:presets` was run and the twelve `presets/` patches are
       committed with the rename.

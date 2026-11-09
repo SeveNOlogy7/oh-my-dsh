@@ -10,7 +10,8 @@ const lock = JSON.parse(await fs.readFile(path.join(root, 'upstream', 'omo-sourc
 
 const errors = []
 if (pkg.version !== OMD_VERSION) errors.push(`package version ${pkg.version} != constants ${OMD_VERSION}`)
-if (pkg.private !== true) errors.push('package.json must be private')
+// Published now: npm refuses to publish a private package.
+if (pkg.private === true) errors.push('package.json is private; npm publish would be refused')
 if (pkg.type !== 'module') errors.push('package.json must be type=module')
 if (pkg.engines?.node !== '>=22.13.0') errors.push('package.json engines.node must be >=22.13.0')
 if (lock.reference?.tag !== `v${OMO_VERSION}`) errors.push(`lock tag ${lock.reference?.tag} != v${OMO_VERSION}`)

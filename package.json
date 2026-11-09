@@ -1,7 +1,6 @@
 {
-  "name": "oh-my-dsh",
+  "name": "@jhcai11/oh-my-dsh",
   "version": "0.1.0",
-  "private": true,
   "description": "Agent orchestration for DeepSeek Harness, aligned with oh-my-openagent 4.19.4",
   "keywords": [
     "deepseek",

@@ -295,7 +295,14 @@ test('the plugin section reports the row language and generates the exact profil
   assert.match(snippet.text, /^  name: "@deepseek-ai\/dsh-agent-preset"$/m)
   assert.match(snippet.text, /^  config:$/m)
   assert.match(snippet.text, /^\s+- id: omd$/m, 'the restated config keeps the runtime row')
-  assert.match(snippet.text, /^\s+name: "oh-my-dsh"$/m)
+  // The runtime row's specifier is the package name, which a release rename
+  // changes; derive it rather than pinning the pre-rename value.
+  const pkgName = JSON.parse(readFileSync(path.join(root, 'package.json'), 'utf8')).name
+  const rowLine = `name: ${JSON.stringify(pkgName)}`
+  assert.ok(
+    snippet.text.split('\n').some((line) => line.trim() === rowLine),
+    `the restated config keeps the runtime row (${rowLine})`,
+  )
   const lines = snippet.text.split('\n')
   const agentLine = lines.findIndex((line) => /^\s+agent: "sisyphus"$/.test(line))
   assert.ok(agentLine > 0, 'the omd row keeps its agent key')
