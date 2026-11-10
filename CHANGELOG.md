@@ -79,8 +79,6 @@
   preset-scoped `/omd-config` command, so no global command or row was added.
 - `/omd-config` gained a `set <json>` write form beside its report form.
 
-## Unreleased
-
 ### Changed
 
 - The package is published as `@jhcai11/oh-my-dsh`. The bare name `oh-my-dsh`
@@ -101,6 +99,10 @@
   standard` while running inside `omd-sisyphus`. The active preset is now
   resolved from the live session's events, then the persisted log, and only then
   the header.
+- The settings page's "no OMD command" notice printed the same sentence twice:
+  it rendered `noCommand` as both the title and the body. That state has its own
+  title and body now, and the body names the profile-level runtime row and where
+  to check it.
 
 ## 0.1.0 — 2026-11-04
 

@@ -378,6 +378,8 @@ window.__ModuleLoader__.load({
         noSessionTitle: 'No OMD session is open',
         noSessionBody: 'This page configures the workspace of the OMD session that is open in the main view. Open or resume an OMD session, then reopen Settings.',
         noCommand: 'The current session is not an OMD preset session, so it has no /omd-config command.',
+        noCommandTitle: 'This session has no OMD commands',
+        noCommandBody: 'The OMD runtime row is mounted for the whole profile, so its /omd-config command normally exists in every session. If it is missing here, check that the bundle is enabled and loaded under Settings → Plugins.',
         bridgeMissing: 'This build exposes no Client Remote service, so the page cannot reach the Host.',
         protocolError: 'The Host answered with an unexpected payload.',
         failed: 'Failed: {message}',
@@ -430,6 +432,8 @@ window.__ModuleLoader__.load({
         noSessionTitle: '没有打开 OMD 会话',
         noSessionBody: '本页面配置主视图中当前 OMD 会话的工作区。请先打开或恢复一个 OMD 会话，然后重新打开设置。',
         noCommand: '当前会话不是 OMD preset 会话，因此没有 /omd-config 命令。',
+        noCommandTitle: '当前会话没有 OMD 命令',
+        noCommandBody: 'OMD runtime 行是整个 profile 级挂载的，正常情况下每个会话都有 /omd-config 命令。若此处缺失，请在「设置 → 内置插件」里确认该 bundle 已启用并加载成功。',
         bridgeMissing: '此版本没有提供 Client Remote 服务，页面无法访问宿主。',
         protocolError: '宿主返回了无法识别的数据。',
         failed: '失败：{message}',
@@ -823,8 +827,8 @@ window.__ModuleLoader__.load({
         return shell([
           h('div', { key: 'title', style: styles.pageTitle }, t('title')),
           h('div', { key: 'notice', style: styles.notice },
-            h('div', null, view.phase === 'no-session' ? t('noSessionTitle') : t('noCommand')),
-            h('div', { style: styles.meta }, view.phase === 'no-session' ? t('noSessionBody') : t('noCommand')),
+            h('div', null, view.phase === 'no-session' ? t('noSessionTitle') : t('noCommandTitle')),
+            h('div', { style: styles.meta }, view.phase === 'no-session' ? t('noSessionBody') : t('noCommandBody')),
           ),
           h('div', { key: 'actions', style: styles.toolbar }, button(t('retry'), () => void load(), false, view.busy)),
         ])
