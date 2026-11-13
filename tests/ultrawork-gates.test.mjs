@@ -100,12 +100,15 @@ test('verification commands are recognized and failed results are detected', () 
 })
 
 test('deliverable files are workspace files outside .omd', () => {
-  const workspace = 'E:\\ws'
+  // Platform-neutral on purpose: CI runs on Linux, where a hard-coded `E:\ws`
+  // is not an absolute path, so `path.resolve` would fold it into the cwd and
+  // every "outside the workspace" case would pass vacuously.
+  const workspace = path.resolve(path.sep === '\\' ? 'E:\\ws' : '/ws')
   assert.equal(isDeliverableFile(workspace, 'src/a.js'), true)
   assert.equal(isDeliverableFile(workspace, path.join(workspace, 'docs', 'a.md')), true)
   assert.equal(isDeliverableFile(workspace, '.omd/tmp/a.py'), false)
   assert.equal(isDeliverableFile(workspace, path.join(workspace, '.omd', 'plans', 'x.md')), false)
-  assert.equal(isDeliverableFile(workspace, 'E:\\other\\a.js'), false)
+  assert.equal(isDeliverableFile(workspace, path.resolve(workspace, '..', 'other', 'a.js')), false)
 })
 
 test('a draft plan or a plan without task rows does not qualify', async () => {
