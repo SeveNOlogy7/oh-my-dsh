@@ -1,5 +1,225 @@
 # Changelog
 
+## 0.1.4 — 2026-11-13
+
+> 0.1.3 was committed on 2026-11-09 but never tagged or published (no `v0.1.3`
+> tag, no GitHub release, no npm version). 0.1.4 is the first release that ships
+> the 0.1.3 changes together with the work below.
+
+### Added
+
+- **Ultrawork gates are enforced, not just described.** `ultrawork.requirePlanGate`
+  and `ultrawork.dualEvidence` were schema keys the runtime never read, and the
+  prompt's "baseline before editing" step had no mechanism at all. The per-agent
+  tool guard now refuses a deliverable `write`/`edit` (inside the workspace,
+  outside `.omd/`) until `.omd/plans` holds a non-draft plan with task rows
+  written or updated after this ultrawork run started (the boulder's active plan
+  is always accepted), and a new `ultrawork.requireBaseline` (default `true`)
+  refuses the first one until a verification command has run. Verification
+  commands are recognized through shell quoting and absolute `node.exe` paths, so
+  a bundled-node `& '…\node.exe' --test` run counts. `tools/post-execute` records
+  baseline runs,
+  successful verification runs, and deliverable writes; at turn-stopping,
+  `dualEvidence` keeps a turn open when deliverables were written (or a plan was
+  completed) but nothing was verified, and lets a completed plan with evidence
+  close instead of nudging it open again. A timed-out or signal-killed run is a
+  successful tool call with `[exit code: null]`, so it is treated as a failed
+  verification rather than evidence. The settings page exposes all three as
+  controls instead of listing them as reserved.
+- **Graphical model-chain fallback editor in `Settings → OMD`.** The
+  Agents / categories / models section is now a chain board: every role and
+  category shows its ordered primary → fallback steps, catalog aliases resolve
+  inline, inherited/default values are marked, and the exact JSON document stays
+  available in an advanced disclosure. Every graph action edits the same
+  document, so the existing minimal-diff save path, validator, and reset rules
+  are unchanged.
+- **Ordered model chains with automatic fallback.** `agents.<id>.chain` and
+  `categories.<name>.chain` accept an ordered array of catalog aliases,
+  `provider/model` strings, or inline route objects. When a model request fails
+  and no retry policy claims it, OMD records the next route with
+  `agent.model.select()` and starts a continuation turn on it after the failed
+  turn closes. The category a delegation routed through now travels on the
+  child's descriptor label as `omd:<role>@<category>` so the child falls back
+  through the category chain. After a completed fallback turn the next turn
+  tries the primary again.
+
+### Fixed
+
+- **Keyword activation only fires on a directive.** The detector matched
+  `ultrawork`/`ulw`/`team`/`hyperplan` anywhere in a human message, so a question
+  *about* ultrawork switched the session into it (and into continuation rounds).
+  A mode keyword now counts only in directive position: the bare first word, a
+  `word:` prefix, `/word`, or a `[word]` tag. `hyperplan-ulw` remains available
+  as an explicit directive; the old `hyperplan` + `ulw` pair no longer combines.
+- **`omd_ui_status` no longer reports `loader scan failed`.** `loader.entries()`
+  is a generator, so the scan called `.filter` on a non-array and lost the loader
+  rows. The scan now normalizes arrays, Maps, iterables, and `toArray()` results
+  before filtering.
+- **Model routing actually applies on DSH 0.2.2-rc.1.** The old hook changed
+  provider/model/effort through the deprecated `agent/request` waterfall, which
+  now rejects such a step before it commits input (the loop keeps the selection
+  it captured before preparation). Routing now records the route through
+  `agent.model.select()`; `agent/request` only applies the step's temperature
+  and output cap.
+- **Sessions no longer die with `Unsupported message role: undefined`
+  (`UNSUPPORTED_CONTENT`).** `agent.followup()` and `agent.steer()` are typed as
+  a complete `UserMessage` — `{id, role: 'user', content, source}` — and DSH
+  persists what it is given verbatim: it fills in neither `role` nor `id`. OMD
+  passed `{content, source}` (the shape DSH's own README example shows), so the
+  durable log received a message with `role: undefined` and **every** later
+  request of that session failed in the provider adapter. `/omd-ulw`,
+  `/omd-plan`, `/omd-hyperplan`, `/omd-team`, `/omd-start-work`,
+  `/omd-init-deep`, `/omd-refactor`, `/omd-remove-ai-slops`, the continuation
+  steer, and the comment-checker feedback contexts all built messages by hand
+  and were all affected. They now share `src/core/message.js`, and
+  `tests/message-contract.test.mjs` asserts the full contract on every message
+  OMD constructs. Sessions already poisoned by the old build need their log
+  repaired; the record to fix is the `user/message` with no `role`.
+- **The keyword hook now fires.** A `user/message` session event carries the
+  message ITSELF as its data (`SessionEventMap['user/message'] = UserMessage`);
+  the `{..., message}` wrapper belongs to assistant/system/tool records only.
+  The listener read `event.data.message.content`, so the text was always empty,
+  `detectMode()` never ran, and prose-triggered mode switching, the mode-text
+  refresh, and the `keyword-mode` ledger row were dead. OMD-injected text
+  (continuation steers, tool feedback) now carries `source.kind: 'omd'` and the
+  hook reads only `source.kind: 'user'`, so a plan title containing "team" can no
+  longer select a mode.
+- **`/omd-handoff` and `omd_session_read` keep the user turns.** Both read the
+  assistant-shaped `data.message` wrapper for `user/message` too, so every human
+  instruction was silently dropped — from the handoff document a new session is
+  told to trust, and from the transcript the model reads back.
+- **The on-disk session fallbacks work again.** `resolveActivePreset` and
+  `resolveDescriptorRole` extracted `sessionQuery.readSession` into a local and
+  called it detached; it is a class method reading `this._corpus`, so the call
+  threw a `TypeError` that the surrounding catch reported as "no answer". A
+  session whose role only the persisted log carries now resolves it.
+- **The settings page no longer executes `/omd-config` in the open session.**
+  Every mount of `Settings → Oh-My-DSH` used to call
+  `ctx.remote.commands.execute(...)`, which appended a `command/run` +
+  `command/done` pair to the session log just because a settings page opened.
+  The page now posts the same `/omd-config [set <json>]` line to its own
+  endpoint, `POST api/omd/config`, registered by the runtime row through
+  `ctx.connection.fetch.register` — DSH's authenticated `/api` channel applies
+  the Host/Origin fence and the browser cookie, so no token lives in OMD code,
+  and no command record is ever written. The endpoint names a session only to
+  ask which workspace to show; the Host resolves that directory itself (live
+  header, then the persisted log, then the profile default), so the browser
+  never names a path and the page works with no session open.
+
+### Fixed by the full-surface verification (2026-11-13)
+
+A verification pass over every shipped capability (10 gates, 18 visible tools,
+13 commands, 15 skills, 7 modes, the config system, the client half, i18n,
+docs parity, packaging) produced 12 findings and a report at
+`docs/feature-verification-2026-11-13.md`. All 12 are fixed; the two whose
+surface is reachable from tools were re-checked on a restarted Host.
+
+- **Blocked keys are stripped at every depth.** `mergeDeep` guarded only the
+  level it iterated and copied a whole subtree when the target path did not
+  pre-exist, so a nested `__proto__`/`prototype`/`constructor` reached the
+  resolved config and made the settings write degrade to a comment-losing
+  rewrite. `sanitizeValue` now strips recursively in `mergeDeep` and
+  `normalizeConfig`, and a patch whose only content was blocked keys is a usage
+  refusal instead of a silent rewrite. `Object.prototype` was never polluted.
+- **An effort-only delegation override no longer demotes the primary.** With a
+  configured model chain, `omd_delegate({reasoning_effort})` merged the override
+  through the legacy resolver, which cannot see a chain, so step 0 became
+  invalid and the first fallback ran without the requested effort. A partial
+  override now overlays the step that would actually run.
+- **`/omd-stop-continuation` no longer manufactures a paused boulder.** With no
+  boulder slot it pauses nothing, says `no boulder to pause`, and writes no
+  slot (previously it created one and the board reported an open paused boulder).
+- **A continued delegation reports `unknown`, not `running`.** OMD cannot observe
+  a continued child's end, so the record used to stay `running` forever and the
+  board counted a finished child as active; the record now says `unknown` with a
+  continuation note, and the child's result still arrives as a completion notice.
+- **The board no longer counts soft-deleted tasks.** `TaskStore.summary()`
+  excludes `status: "deleted"`; `omd_task_list` still shows the rows.
+- **`npm run check:license` reports "unmeasured" as `exit 2`** instead of a green
+  skip when `OMD_UPSTREAM_DIR` is unset (0 = measured and within threshold,
+  1 = over threshold). The real overlap audit remains unmeasured by design.
+- **The parity gate checks both directions.** `scripts/check-parity.mjs` used to
+  prove only that known names appear in the doc; it now also fails on a
+  documented token that resolves to no entity, checks the Agents table exactly,
+  and reads its canonical lists from `src/tools/names.js` /
+  `src/commands/names.js` (pinned to the runtime by a test).
+- **`docs/tools.md` documents conditional registration** (`omd_lsp` needs
+  `ctx.lsp`, `omd_diagnostics` needs `ctx.subprocess`, the delegation tools need
+  a delegating role plus `subagents`, and the task tools are denied by a
+  restriction while `taskSystem.enabled` is false).
+- **Dead client i18n keys removed** (`errJson`, `projectTitle`, `readonlyFile`,
+  `tiers`), from both dictionaries; `probe-c-i18n` now reports no unreachable
+  key, and a regression test keeps them out.
+- **Historical doc counts annotated** in `docs/verification.md` (`14 skills` is
+  the 2026-11-04 revision; 15 today), and the stale evidence artifacts were
+  refreshed (`repro-defects.mjs` is now a regression check that exits 0).
+
+### Added
+
+- `engines.dsh: "^0.2.1-rc.5"`, an explicit DSH compatibility claim. DSH reads
+  `engines.dsh` alone and evaluates it with prereleases included, so the caret
+  form is deliberate: a plain `<0.3.0` upper bound would still admit
+  `0.3.0-alpha.1`, while `<0.3.0-0` excludes the whole unverified next minor.
+  The floor is the build the bundle was boot-verified against, and the upper
+  build is the one the role channel was verified end-to-end on. Widening the
+  range means re-running the verification recorded in `docs/verification.md`.
+- `/omd-config` gained a second write form: `set {"patch": {…}, "unset":
+  [["delegation","maxConcurrent"], …]}` applies one partial patch and deletes key
+  paths from the same `.omd/config.jsonc` in one request. Both keys are optional
+  and at least one must be non-empty; a path the file does not set is a no-op,
+  the patch wins on overlap, validation runs on the merged document, and a
+  rejected write still leaves the file byte-identical. The answer's `write`
+  object reports the paths actually removed in `unset`.
+
+### Changed
+
+- **Breaking:** OMD registers no per-role agent preset any more. The eleven
+  `presets/omd-*.patch.yml` files are gone and `dsh.bundle.patch` lists only
+  `omd-runtime` and `omd-ui`. DSH's preset picker lists every registered preset,
+  `PresetDefinition` has no hidden/selectable field, and a preset cannot be
+  switched once a session's first turn starts — so those eleven entries could
+  only mislead. A role now travels on the delegated child's own
+  `subagent/descriptor` label (`omd:<role>`), which
+  `src/state/active-role.js` reads back off the child's session log. The
+  per-role preset stays only as a compatibility fallback, so a session allocated
+  by an older install still resolves its role.
+- Delegation no longer pins the child's preset. A delegated child inherits the
+  parent's preset through DSH's own `composeFrom` path; `delegation.childPreset`
+  (default `null`) is the one override, and only a non-empty trimmed string
+  names a preset.
+- A category delegation now labels its child with the executor role
+  (`omd:sisyphus-junior`) rather than the category name. The old hard-coded
+  `omd-sisyphus-junior` preset used to carry that role, so removing the presets
+  would otherwise have left every category-delegated child capability-only.
+- The doctor gained an `active-role` row reporting the runtime's single role
+  resolution, and its `presets` row now PASSES only when no `omd-*` preset is
+  left registered, FAILING with each leftover's own reason. The `active-preset`
+  row stays, but no longer tells anyone to select an OMD preset.
+- The settings page covers the runtime's effective configuration surface instead
+  of the first version's handful of keys: six control groups (general, keyword
+  activation, delegation, hooks and continuation, rules, diagnostics) plus the
+  agents/categories/models JSON document. Each field is tagged `in file` or
+  `inherited`, or shows the built-in value as `Default: …`; a save writes only
+  the keys the user changed; and a reset stages a removal (the new `unset` form)
+  so the inherited value applies again. The JSON document edits this file's own
+  overrides, never the merged value, so one edit cannot copy inherited entries
+  into the file. Provenance and resets are computed from the envelope's new
+  `layers` (every parsed layer with the top-level keys it sets, farthest first)
+  and `defaults` (a clone of the built-in defaults); a Host from before this page
+  version sends neither, and the page then keeps the legacy `set {<patch>}` write
+  form and offers no reset; a removal requested against that older Host is
+  reported as blocked and named, never sent as a line that Host would refuse.
+  Keys the schema accepts but the runtime does not read are reported as reserved
+  instead of getting a control that would change nothing. The diagnostics control
+  keeps keys it cannot show (such as `glob`) on every entry the user did not
+  rewrite, and clearing a value only an inherited layer provides writes nothing
+  and says so instead of looking like a silent no-op.
+- The settings page validates a value in the browser with the same rules the
+  Host enforces — integer minimums, `commentChecker` membership, the JSON
+  document's shape — so a bad value is an inline error and a disabled save rather
+  than a round trip. The Host stays the authority, and its validator message is
+  shown if it rejects the write anyway.
+
 ## 0.1.3 — 2026-11-09
 
 ### Changed
