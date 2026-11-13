@@ -9,6 +9,7 @@ import { readMode, writeMode, clearMode } from '../state/modes.js'
 import { appendLedger } from '../state/ledger.js'
 import { backgroundRegistry } from '../state/background.js'
 import { resolveActivePreset } from '../state/active-preset.js'
+import { resolveDescriptorRoleInfo } from '../state/active-role.js'
 import { normalizeLanguage } from '../i18n/index.js'
 import { Scheduler } from './scheduler.js'
 
@@ -20,8 +21,8 @@ export class Runtime {
     // where the row sits inside one OMD preset and that preset *is* the role.
     // A row that omits `agent` is the global capability row. It mounts once for
     // the whole profile, so the role cannot be a construction fact any more; it
-    // is resolved per session from the active preset, and a session running a
-    // non-OMD preset gets the capability-only identity (`null`).
+    // is resolved per session from the delegation channel, and a session that
+    // carries no role label gets the capability-only identity (`null`).
     this.configuredAgent = config.agent ?? null
     if (this.configuredAgent !== null && !AGENTS[this.configuredAgent]) {
       throw new Error(`unknown OMD agent: ${String(config.agent)}`)
@@ -101,7 +102,16 @@ export class Runtime {
     // The header is a creation fact and reads `standard` for every interactive
     // session, so the picker choice is read through the session projection.
     const preset = this.configuredAgent ?? (await resolveActivePreset(this.ctx, agent))
-    const role = this.configuredAgent ?? agentIdFromPreset(preset)
+    // A delegated child's role arrives on its own subagent descriptor, which
+    // DSH appends during setup — before this listener is announced. The reader
+    // is defensive because it touches two optional services, and the fallback to
+    // the preset keeps every pre-existing `omd-<role>` session resolving as it
+    // did before OMD stopped publishing one preset per role. The same descriptor
+    // can carry the category a delegation routed through, which selects the
+    // model chain the child falls back over.
+    const resolved = await this.#resolveRoleInfo(agent, preset)
+    const role = resolved.role
+    const category = resolved.category
     const { personaText, settings } = await this.personaFor(role, loaded.config)
     const stem = safeStem(agent.id)
     const mode = await readMode(cwd, stem)
@@ -112,6 +122,12 @@ export class Runtime {
       cwd,
       preset,
       role,
+      category,
+      // The route inputs mirror what the delegation call used: a category
+      // delegation names no subagent, so its chain comes from the category, not
+      // from the junior role's own overrides.
+      routeAgent: category ? null : role,
+      roleResolved: role !== null,
       config: loaded.config,
       diagnostics: loaded.diagnostics,
       settings,
@@ -121,9 +137,25 @@ export class Runtime {
       modeText: '',
       rulesText: '',
       continuationRounds: mode?.continuation_rounds ?? 0,
+      modelChain: null,
+      modelIndex: 0,
+      pendingFallback: null,
       stopped: false,
       dispose: null,
     }
+  }
+
+  /**
+   * The role and category precedence, in one place: a row that pins an agent
+   * answers immediately, a delegated child is read back off its descriptor
+   * label, and the preset stays the compatibility fallback for the sessions
+   * that were allocated back when one preset existed per role.
+   */
+  async #resolveRoleInfo(agent, preset) {
+    if (this.configuredAgent !== null) return { role: this.configuredAgent, category: null }
+    const fromSession = await resolveDescriptorRoleInfo(this.ctx, agent)
+    if (fromSession) return fromSession
+    return { role: agentIdFromPreset(preset), category: null }
   }
 
   /**
@@ -137,16 +169,26 @@ export class Runtime {
    * `presetHint` is the `agent-preset/selected` payload. It is authoritative
    * and is preferred over re-reading the session log, which would be a
    * redundant round trip that can also lag the event it is reacting to.
+   *
+   * `delegated` marks a call driven by the descriptor channel rather than by
+   * the picker, so the outcome is recorded as the session's answer for good.
+   * The session's own label outranks the hint in both cases: the hint is where a
+   * role is *inferred* from the preset, the label is where it is *declared*.
    */
-  async refreshRole(agent, presetHint = undefined) {
+  async refreshRole(agent, presetHint = undefined, { delegated = false } = {}) {
     if (!this.global) return false
     const state = await this.stateFor(agent)
     const preset = presetHint ?? (await resolveActivePreset(this.ctx, agent))
-    const role = agentIdFromPreset(preset)
+    const resolved = await this.#resolveRoleInfo(agent, preset)
+    const role = resolved.role
+    const category = resolved.category
     state.preset = preset ?? null
-    if (role === state.role) return false
+    if (delegated) state.roleResolved = role !== null
+    if (role === state.role && category === state.category) return false
     const { personaText, settings } = await this.personaFor(role, state.config)
     state.role = role
+    state.category = category
+    state.routeAgent = category ? null : role
     state.personaText = personaText
     state.settings = settings
     return true

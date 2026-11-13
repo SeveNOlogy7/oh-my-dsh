@@ -125,7 +125,13 @@ export class TaskStore {
   }
 
   async summary() {
-    const tasks = await this.list()
+    // `deleted` is a soft delete: the row stays on disk (and in `list()`) so that
+    // dependencies and history keep resolving, which is why this cannot simply
+    // drop it on delete. It is not live work, though, so it must not be counted
+    // here — otherwise the board keeps reporting tasks that `omd_task_list`
+    // already shows as `[deleted]`, including a deleted task with blockers as
+    // "blocked".
+    const tasks = (await this.list()).filter((task) => task.status !== 'deleted')
     return {
       total: tasks.length,
       pending: tasks.filter((task) => task.status === 'pending').length,

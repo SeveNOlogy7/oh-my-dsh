@@ -21,20 +21,20 @@ export const SKILL_NAMES = [
 ]
 
 /**
- * Every role carries `mode`, but DSH's preset picker lists every registered
- * preset: `PresetDefinition` exposes only id/name/description/order/plugins, it
- * has no hidden or selectable field, and a delegated child needs its preset
- * registered because the subagent service mounts it by id. A subagent preset
- * therefore cannot be hidden from the picker, so the roster order makes the
- * hierarchy visible instead: primaries sort first (10-13) and subagents follow
- * (20-26), and the subagent descriptions say they are delegation targets.
+ * Every role carries `mode`, but nothing is hidden from the user by it: OMD
+ * publishes no preset per role, so the picker never lists a role as a choice.
+ * `mode` decides who may drive a session and who is only ever a delegation
+ * target, and the description marker below states that in the one place a model
+ * reads the roster. DSH's `PresetDefinition` still has no hidden/selectable
+ * field, so if the presets ever come back, the roster order plus this marker is
+ * the only way to show the hierarchy.
  */
 export const DELEGATION_ONLY = 'Delegation target — call it from a primary agent with omd_delegate; not meant to drive a session (委派目标：由主 agent 通过 omd_delegate 调用，不适合直接开会话).'
 
 /**
- * The eleven OmO 4.19.4 roles, expressed as OMD presets. Policy here is
- * structural: readOnly denies file mutation tools, canDelegate decides whether
- * omd_delegate exists, and writeScopes is enforced by a tool guard.
+ * The eleven OmO 4.19.4 roles. Policy here is structural: readOnly denies file
+ * mutation tools, canDelegate decides whether omd_delegate exists, and
+ * writeScopes is enforced by a tool guard.
  *
  * `omd-doctor` leads every role's skill list: a self-check is useful to any
  * role, including the read-only ones, and it replaced the old `/omd-doctor`
@@ -232,6 +232,79 @@ export function agentIdFromPreset(presetId) {
   if (!presetId?.startsWith('omd-')) return null
   const id = presetId.slice(4)
   return AGENTS[id] ? id : null
+}
+
+/**
+ * The channel OMD carries a role on now that it publishes no preset per role.
+ *
+ * A delegated child's composition accepts no OMD-specific field, so the role
+ * has to ride on something DSH already persists: the durable subagent
+ * descriptor's `label`. `delegate.js` and `lookat.js` are its writers, and the
+ * readers are `roleFromLabel` and `state/active-role.js`.
+ */
+export const ROLE_LABEL_PREFIX = 'omd:'
+
+/**
+ * The descriptor label that carries `role`, and optionally the category the
+ * delegation routed through.
+ *
+ * The category travels on the same durable label because a delegated child has
+ * no other channel: its composition accepts no OMD field, and the category is
+ * what selects the model chain the child must fall back through. `@` is the
+ * separator and the category is URI-encoded, so a custom category name cannot
+ * change the role prefix's meaning. A plain `omd:<role>` label from an older
+ * build stays valid and simply carries no category.
+ */
+export function roleLabelFor(role, category = null) {
+  if (typeof role !== 'string' || !role) return null
+  const base = `${ROLE_LABEL_PREFIX}${role}`
+  if (typeof category !== 'string' || category === '') return base
+  try {
+    return `${base}@${encodeURIComponent(category)}`
+  } catch {
+    return base
+  }
+}
+
+/**
+ * Both facts a descriptor label can carry, or `null` when it carries no role.
+ *
+ * The roster validation is the security boundary: a label OMD did not write, or
+ * one naming a role that does not exist, resolves to no role at all rather than
+ * to an unknown string id.
+ */
+export function roleLabelInfo(label) {
+  if (typeof label !== 'string') return null
+  if (!label.startsWith(ROLE_LABEL_PREFIX)) return null
+  const rest = label.slice(ROLE_LABEL_PREFIX.length)
+  const at = rest.indexOf('@')
+  const id = at === -1 ? rest : rest.slice(0, at)
+  if (!id || !AGENTS[id]) return null
+  let category = null
+  if (at !== -1 && at < rest.length - 1) {
+    try {
+      category = decodeURIComponent(rest.slice(at + 1)) || null
+    } catch {
+      category = null
+    }
+  }
+  return { role: id, category }
+}
+
+/**
+ * The role a descriptor label stands for, or `null` when it carries none.
+ *
+ * Validates the prefix *and* the roster, which is what keeps a descriptor's
+ * label from becoming an escalation path. `null` is the capability-only
+ * identity, so an unrecognized label degrades to exactly that.
+ */
+export function roleFromLabel(label) {
+  return roleLabelInfo(label)?.role ?? null
+}
+
+/** The category a descriptor label carries, or `null` when it carries none. */
+export function categoryFromLabel(label) {
+  return roleLabelInfo(label)?.category ?? null
 }
 
 /**

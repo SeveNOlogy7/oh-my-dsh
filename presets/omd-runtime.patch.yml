@@ -5,8 +5,11 @@
 # exactly one OMD role; this one is mounted once for the whole profile, so its
 # tools, commands, skills and hooks exist in every preset, including the shipped
 # `standard`, `ptc`, `minimal` and `cordis`. The role is resolved per session
-# from the active preset id: `omd-<role>` is that role, anything else is the
-# capability-only identity, which has orchestration but no persona.
+# from the session's own delegated `subagent/descriptor` label (`omd:<role>`),
+# with the active preset kept only as the compatibility fallback for sessions
+# allocated while OMD still published one preset per role. A session that
+# resolves to neither is the capability-only identity, which has orchestration
+# but no persona.
 #
 # `language` is a per-row Config key. There is now exactly one such row, so it
 # is a profile-wide setting rather than a per-preset one.

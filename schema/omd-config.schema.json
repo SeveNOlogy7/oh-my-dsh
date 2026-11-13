@@ -24,6 +24,27 @@
           "provider": { "type": ["string", "null"] },
           "model": { "type": ["string", "null"] },
           "modelRef": { "type": ["string", "null"] },
+          "chain": {
+            "type": "array",
+            "description": "Ordered model chain: index 0 is the primary route, later entries are fallbacks tried when a model request fails.",
+            "items": {
+              "oneOf": [
+                { "type": "string" },
+                {
+                  "type": "object",
+                  "properties": {
+                    "provider": { "type": ["string", "null"] },
+                    "model": { "type": ["string", "null"] },
+                    "modelRef": { "type": ["string", "null"] },
+                    "reasoningEffort": { "type": ["string", "null"] },
+                    "temperature": { "type": ["number", "null"], "minimum": 0, "maximum": 2 },
+                    "maxTokens": { "type": ["integer", "null"], "minimum": 1 }
+                  },
+                  "additionalProperties": true
+                }
+              ]
+            }
+          },
           "reasoningEffort": { "type": ["string", "null"] },
           "temperature": { "type": ["number", "null"], "minimum": 0, "maximum": 2 },
           "maxTokens": { "type": ["integer", "null"], "minimum": 1 },
@@ -42,6 +63,27 @@
         "properties": {
           "description": { "type": "string" },
           "modelRef": { "type": ["string", "null"] },
+          "chain": {
+            "type": "array",
+            "description": "Ordered model chain: index 0 is the primary route, later entries are fallbacks tried when a model request fails.",
+            "items": {
+              "oneOf": [
+                { "type": "string" },
+                {
+                  "type": "object",
+                  "properties": {
+                    "provider": { "type": ["string", "null"] },
+                    "model": { "type": ["string", "null"] },
+                    "modelRef": { "type": ["string", "null"] },
+                    "reasoningEffort": { "type": ["string", "null"] },
+                    "temperature": { "type": ["number", "null"], "minimum": 0, "maximum": 2 },
+                    "maxTokens": { "type": ["integer", "null"], "minimum": 1 }
+                  },
+                  "additionalProperties": true
+                }
+              ]
+            }
+          },
           "provider": { "type": ["string", "null"] },
           "model": { "type": ["string", "null"] },
           "reasoningEffort": { "type": ["string", "null"] },
@@ -80,7 +122,8 @@
         "maxDepth": { "type": "integer", "minimum": 0, "default": 1 },
         "defaultBackground": { "type": "boolean", "default": false },
         "waitTimeoutMs": { "type": "integer", "minimum": 1, "default": 600000 },
-        "pollMs": { "type": "integer", "minimum": 1, "default": 30000 }
+        "pollMs": { "type": "integer", "minimum": 1, "default": 30000 },
+        "childPreset": { "type": ["string", "null"], "default": null }
       },
       "additionalProperties": false
     },
@@ -93,6 +136,7 @@
       "type": "object",
       "properties": {
         "requirePlanGate": { "type": "boolean", "default": true },
+        "requireBaseline": { "type": "boolean", "default": true },
         "dualEvidence": { "type": "boolean", "default": true },
         "maxWaves": { "type": "integer", "minimum": 1, "default": 8 },
         "maxContinuationRounds": { "type": "integer", "minimum": 1, "default": 20 }

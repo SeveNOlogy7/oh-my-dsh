@@ -2,12 +2,34 @@
 
 Every OMD tool is registered once, by the profile-level `omd-runtime` row, so
 the tool surface exists in every preset, including the shipped `standard`,
-`ptc`, `minimal`, and `cordis`. What differs is the resolved role: on an
-`omd-<role>` preset that role's tool policy applies, so read-only roles do not
-receive `omd_delegate` and write scopes are enforced by a guard; on any other
-preset the session is capability-only, with orchestration available, no OMD
-persona injected, and no role restriction applied. The exact tool list a
-capability-only session sees is to be verified by the probe.
+`ptc`, `minimal`, and `cordis`. What differs is the resolved role: for a session
+that resolves a role, that role's tool policy applies, so read-only roles do not
+receive `omd_delegate` and write scopes are enforced by a guard; a session that
+resolves no role is capability-only, with orchestration available, no OMD
+persona injected, and no role restriction applied. OMD publishes no preset per
+role: a role is read from the delegated child's `omd:<role>` descriptor label, so
+a root session is always capability-only.
+
+## Conditional registration
+
+OMD registers 19 tools, but three groups appear only when the composition
+provides what they drive, so a Host can legitimately show fewer:
+
+- `omd_lsp` requires `ctx.lsp`; a Host without a language-server service has no
+  `omd_lsp` tool at all.
+- `omd_diagnostics` requires `ctx.subprocess`.
+- `omd_delegate`, `omd_background_output`, `omd_background_cancel`,
+  `omd_background_list`, and `omd_look_at` are registered only for a session
+  whose role may delegate (`canDelegate`), and their calls also need the
+  `subagents` service at call time.
+
+The remaining tools — `omd_status`, `omd_doctor`, `omd_ui_status`,
+`omd_session_list`, `omd_session_read`, `omd_session_search`, `omd_notepad`,
+`omd_mode`, and the four `omd_task_*` tools — need no optional service. The task
+tools are always registered, but while `taskSystem.enabled` is false a tool
+restriction denies `omd_task_*` (`src/hooks/index.js`), so the model never sees
+them, and a direct call to `omd_task_create` refuses with `task system is
+disabled`.
 
 ## omd_delegate
 
@@ -18,11 +40,19 @@ Parameters: `prompt` (required), `description`, `subagent_type`, `category`,
 `output_schema`, `provider`, `model`, `reasoning_effort`, `timeout_ms`.
 
 - `subagent_type` and `category` are mutually exclusive.
+- The child's role is `subagent_type`, or `sisyphus-junior` for a category run;
+  it travels on the child's `subagent/descriptor` label as `omd:<role>`. The
+  child's preset comes from `delegation.childPreset` (default `null`: inherit the
+  parent's preset).
 - `run_in_background` returns immediately with a `bg_*` task id.
 - `task_id` or `session_id` continues an existing child. A continuation returns
-  acceptance; its next result arrives as a completion notice, so
-  `omd_background_output` reports the continued run as `running` instead of
-  joining a new activation.
+  acceptance, and its next result arrives as the child's completion notice in
+  the parent's inbox. OMD has no channel that observes a continued child's end,
+  so the record is stored as `unknown` with `continuation_accepted: true` rather
+  than `running`: the status board does not count it as active, and
+  `omd_background_output` says so explicitly. `subagent_type`/`category` is still
+  required on the continuation call — the role decides the child's policy and
+  route.
 - Completion returns the child output plus a parsed `omd-result` block.
 - A foreground timeout cancels the child and returns an error.
 - `maxDepth` and the parent-role allowlist are enforced.
@@ -31,7 +61,10 @@ Parameters: `prompt` (required), `description`, `subagent_type`, `category`,
 
 `task_id`, `block?`, `timeout_ms?`. Reads the in-memory record or the disk
 record. `block` waits up to the configured bound. A running task returns its
-status instead of hanging forever.
+status instead of hanging forever. A record that was continued reports
+`status: unknown` plus the continuation note: its first run's output stays
+readable, and the continued run's result arrives as a completion notice rather
+than through this record.
 
 ## omd_background_cancel
 
@@ -83,7 +116,7 @@ returns exit codes and bounded output. Empty configuration returns a hint.
 ## omd_look_at
 
 `paths[]`, `prompt`. Reads images through `ctx.fs`, stores them via
-`ctx.attachments`, and delegates to the multimodal-looker preset.
+`ctx.attachments`, and delegates to the `multimodal-looker` role.
 
 ## omd_mode
 
@@ -97,9 +130,12 @@ ledger, next action. Also available as `/omd-status`.
 
 ## omd_doctor
 
-No parameters. Runs the report-only self-check — required services, preset
-registration with each broken preset's own reason, spawn provider, `.omd/` state
-and config readability, browser bundle, upstream lock — and returns one
+No parameters. Runs the report-only self-check — required services, that no
+`omd-*` preset is left registered (`presets`, with a `preset-detail` row carrying
+each leftover's own failure reason), the role the session resolved (`active-role`)
+and the preset it runs on (`active-preset`), the spawn provider, `.omd/` state
+and config readability, the browser bundle (`client-half`), upstream lock — and
+returns one
 `PASS|WARN|FAIL <id>: <detail>` line per check, a `fix:` line for anything that
 has a repair, and a `summary:` line. Read-only: it never edits. The `omd-doctor`
 skill is the entry point, and it replaced the former `/omd-doctor` command so

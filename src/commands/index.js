@@ -13,6 +13,7 @@ import { latestPlan, readPlan, listPlans } from '../state/plan.js'
 import { TaskStore } from '../state/tasks.js'
 import { loadProtocol } from '../agents/prompts.js'
 import { appendLedger } from '../state/ledger.js'
+import { userMessage } from '../core/message.js'
 import { createConfigPage, parseConfigInput } from '../config-page/index.js'
 // Aliased: this module already names result-text parameters `text`.
 import { text as localizedText } from '../i18n/index.js'
@@ -27,7 +28,7 @@ function failure(text) {
 
 function followup(agent, text) {
   if (!agent?.followup) throw new Error('agent followup is unavailable in this composition')
-  agent.followup({ content: [{ type: 'text', text }], source: { kind: 'user' } })
+  agent.followup(userMessage(text))
 }
 
 /**
@@ -246,7 +247,12 @@ export function createCommands(runtime) {
     handler: async ({ agent }) => {
       const state = await runtime.stateFor(agent)
       await runtime.clearMode(agent)
-      await clearBoulder(state.cwd, state.stem, 'paused')
+      // `clearBoulder` answers null when this session never had a slot, and then
+      // nothing was paused: manufacturing a paused slot here would put a boulder
+      // on the board that no `/omd-start-work` ever created, so the receipt says
+      // which of the two happened instead of asserting an effect that did not
+      // occur.
+      const paused = await clearBoulder(state.cwd, state.stem, 'paused')
       let goalText = 'no active goal'
       try {
         if (ctx.get('goals')?.get) {
@@ -260,7 +266,7 @@ export function createCommands(runtime) {
         // goal service optional
       }
       await appendLedger(state.cwd, { event: 'stop-continuation', agent: agent.id })
-      return report(`continuations stopped; boulder paused; ${goalText}`)
+      return report(`continuations stopped; ${paused ? 'boulder paused' : 'no boulder to pause'}; ${goalText}`)
     },
   })
 
@@ -281,7 +287,13 @@ export function createCommands(runtime) {
           for (const event of snapshot.events) {
             const data = event.data ?? {}
             if (event.type === 'user/message' || event.type === 'assistant/message') {
-              const text = (data.message?.content ?? [])
+              // A `user/message` carries the message itself as the event data;
+              // the `{..., message}` wrapper belongs to assistant/system/tool
+              // records. Reading the wrapper for both silently dropped every
+              // human instruction from the handoff a new session is told to
+              // trust.
+              const message = event.type === 'user/message' ? data : data.message
+              const text = (message?.content ?? [])
                 .filter((block) => block?.type === 'text')
                 .map((block) => block.text)
                 .join('\n')
@@ -395,6 +407,8 @@ export function createCommands(runtime) {
     // report; `set <json>` merges a partial patch into the session workspace's
     // `.omd/config.jsonc`, validates it against `schema/omd-config.schema.json`,
     // and answers with the new state. The settings page uses both forms.
+    // `set {"patch":…,"unset":…}` is the same write plus the paths to remove, so
+    // a human typing the line can do everything the page can.
     input: { hint: 'set <json>' },
     handler: async ({ agent, rawInput }) => {
       const state = await runtime.stateFor(agent)
@@ -409,6 +423,7 @@ export function createCommands(runtime) {
                 agentId: state.role,
                 language: runtime.language,
                 patch: parsed.patch,
+                unset: parsed.unset,
               })
         // A rejected write is an error result, so the page and the chat cell
         // both show the validator's own message instead of a generic failure.

@@ -39,3 +39,18 @@ until the goal is verified, not until the first plausible answer.
 8. Do not use shell indirection to bypass a write restriction.
 9. Do not fabricate test output, file paths, or URLs.
 10. Clean up temporary files, ports, and processes before finishing.
+
+## Enforced gates
+
+Steps 2, 4, and 7 are also enforced by the runtime, not just by this prompt:
+
+- A deliverable write or edit (inside the workspace, outside `.omd/`) is refused
+  until `.omd/plans` holds a non-draft plan with at least one task row.
+- The first such write is also refused until one verification command
+  (`npm test`, `npm run check`, `node --test`, …) has run. A failing baseline
+  still counts: the point is to know the starting state.
+- After deliverables are written, or after a plan is marked complete, the turn
+  is kept open until a successful verification run is recorded; a completed
+  plan with evidence closes normally.
+
+A refusal names the missing gate. Do not work around it; satisfy it.

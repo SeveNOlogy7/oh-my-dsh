@@ -1,4 +1,6 @@
 import path from 'node:path'
+import { roleLabelFor } from '../agents/registry.js'
+import { normalizeChildPreset, routeFor } from '../core/config.js'
 import { text } from '../i18n/index.js'
 import { requireAgent, textTool, contentText } from './shared.js'
 
@@ -32,7 +34,7 @@ function serviceAt(ctx, agent, name) {
   }
 }
 
-/** Delegates image inspection to the multimodal-looker preset. */
+/** Delegates image inspection to the multimodal-looker role. */
 export function createLookAtTools(runtime) {
   const ctx = runtime.ctx
 
@@ -56,6 +58,7 @@ export function createLookAtTools(runtime) {
       async (args, exec) => {
         const parent = requireAgent(exec)
         const state = await runtime.stateFor(parent)
+        const childPreset = normalizeChildPreset(state.config.delegation.childPreset)
         const attachments = serviceAt(ctx, parent, 'attachments')
         const subagents = serviceAt(ctx, parent, 'subagents')
         const fs = serviceAt(ctx, parent, 'fs')
@@ -72,18 +75,30 @@ export function createLookAtTools(runtime) {
           blocks.push({ type: 'image', attachment: ref })
         }
         const release = await runtime.scheduler.acquire('look_at')
+        // The looker is a delegated child like any other: without an explicit
+        // route, DSH fills its AgentOptions from the PARENT's live route, which
+        // would silently discard `agents.multimodal-looker`. Pass the role's
+        // configured primary so the child starts on it and its chain fallbacks
+        // stay available.
+        const route = routeFor(state.config, { agentId: 'multimodal-looker' })
+        const agentOptions = {}
+        if (route.provider) agentOptions.provider = route.provider
+        if (route.model) agentOptions.model = route.model
+        if (route.reasoningEffort) agentOptions.reasoningEffort = route.reasoningEffort
+        if (route.maxTokens) agentOptions.maxTokens = route.maxTokens
         try {
           const activation = await subagents.startActivation({
             provider: 'spawn',
-            label: 'omd:multimodal-looker',
+            label: roleLabelFor('multimodal-looker'),
             request: {
               cwd: state.cwd,
               prompt: blocks,
               parent,
-              // The looker role is a registered preset, so the child is
-              // composed (and its role resolved) by preset id, exactly as
-              // `omd_delegate` composes a named subagent.
-              agentPreset: 'omd-multimodal-looker',
+              // `delegation.childPreset` governs this child exactly as it governs
+              // `omd_delegate`: absent key means "inherit the parent's preset",
+              // and the looker's role is carried by `label`.
+              ...(childPreset ? { agentPreset: childPreset } : {}),
+              agentOptions: Object.keys(agentOptions).length ? agentOptions : undefined,
               maxDepth: 1,
             },
             signal: exec.signal,

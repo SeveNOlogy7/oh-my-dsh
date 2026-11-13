@@ -1,6 +1,7 @@
 import { createTools } from '../tools/index.js'
 import { createCommands } from '../commands/index.js'
 import { createSkills, createSkillProvider } from '../skills/index.js'
+import { registerConfigTransport } from '../config-page/transport.js'
 import { Runtime } from './runtime.js'
 import fs from 'node:fs'
 import path from 'node:path'
@@ -36,6 +37,26 @@ export function apply(ctx, config = {}) {
   const offCreated = ctx.on('agent/created', (payload) => runtime.onAgentCreated(payload))
   const offDisposed = ctx.on('agent/disposed', (payload) => runtime.onAgentDisposed(payload))
 
+  // The settings page's transport: one exact Fetch route on DSH's authenticated
+  // `/api` channel, so opening the page reads and writes `.omd/config.jsonc`
+  // without executing anything in a session. `connection` is an OPTIONAL
+  // dependency — a shell or headless composition has no browser channel and the
+  // row must still mount there — so this listens for it instead of declaring it
+  // in `inject` (which would keep the whole row from activating).
+  const registerTransport = (ownerCtx) => {
+    try {
+      const dispose = registerConfigTransport(ownerCtx, {
+        language: runtime.language,
+        log: (event, data) => runtime.log('warn', event, data),
+      })
+      if (typeof dispose === 'function') disposers.push(dispose)
+    } catch (error) {
+      runtime.log('warn', 'config-transport-registration-failed', { error: String(error?.message ?? error) })
+    }
+  }
+  if (typeof ctx.inject === 'function') ctx.inject(['connection'], (connectionCtx) => registerTransport(connectionCtx))
+  else registerTransport(ctx)
+
   if (process.env.OMD_DEBUG_APPLY) {
     try {
       const dir = path.join(process.cwd(), '.omd')
@@ -70,7 +91,7 @@ export function apply(ctx, config = {}) {
     })()
   }
 
-  return () => {
+  const teardown = () => {
     try {
       offDisposed()
     } catch {
@@ -90,4 +111,13 @@ export function apply(ctx, config = {}) {
     }
     runtime.dispose()
   }
+
+  // The role a session ends up with is resolved asynchronously off its own
+  // descriptor, so a caller cannot observe it the moment `agent/created`
+  // settles. Exposing the runtime read-only lets a test await that settling
+  // instead of guessing at a sleep, which is what makes the role channel
+  // assertable at all. It grants nothing a caller could not already reach
+  // through the context, and the disposer stays a plain call.
+  Object.defineProperty(teardown, 'runtime', { value: runtime, enumerable: false })
+  return teardown
 }

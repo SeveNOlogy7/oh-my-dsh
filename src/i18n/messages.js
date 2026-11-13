@@ -46,7 +46,7 @@ export const MESSAGES = {
     'tool.omd_status.description':
       'Read a compact orchestration status: mode, boulder, plans, tasks, background work, recent ledger.',
     'tool.omd_doctor.description':
-      'Run report-only Oh-My-DSH diagnostics: required services, preset registration, spawn provider, config and state readability, browser bundle, upstream lock. Returns one PASS/WARN/FAIL line per check with a fix, and never edits anything. The omd-doctor skill tells you how to read and report it.',
+      'Run report-only Oh-My-DSH diagnostics: required services, that no per-role preset is left registered, the session role, spawn provider, config and state readability, browser bundle, upstream lock. Returns one PASS/WARN/FAIL line per check with a fix, and never edits anything. The omd-doctor skill tells you how to read and report it.',
     'tool.omd_lsp.description':
       'Query the language server for a definition, references, implementation, or hover.',
     'tool.omd_diagnostics.description':
@@ -86,7 +86,7 @@ export const MESSAGES = {
       'Use when reviewing UI screenshots, design comparisons, or visual acceptance.',
     'skill.omd-doctor.description': 'Diagnose an Oh-My-DSH installation and report PASS/WARN/FAIL with fixes.',
     'skill.omd-doctor.whenToUse':
-      'Use after installing or updating the OMD bundle, when a preset, tool, command, or skill looks missing, or before reporting that OMD is working.',
+      'Use after installing or updating the OMD bundle, when a tool, command, or skill looks missing, when a per-role preset is left over from an older install, or before reporting that OMD is working.',
     'skill.omd-frontend.description':
       'Build or review UI with design intent, accessibility, and responsive behavior.',
     'skill.omd-frontend.whenToUse': 'Use for visual-engineering tasks, component work, styling, or UI review.',
@@ -141,7 +141,7 @@ export const MESSAGES = {
     'tool.omd_mode.description': '读取或切换当前 agent 的编排模式。',
     'tool.omd_status.description': '读取精简的编排状态：模式、boulder、计划、任务、后台工作与最近账本事件。',
     'tool.omd_doctor.description':
-      '运行只做报告的 Oh-My-DSH 自检：必需服务、预设注册、spawn provider、配置与状态可读性、浏览器 bundle、上游锁文件。每项检查输出一行 PASS/WARN/FAIL 及修复建议，绝不修改任何内容。如何解读与汇报见 omd-doctor 技能。',
+      '运行只做报告的 Oh-My-DSH 自检：必需服务、是否还残留按角色注册的旧 preset、当前会话角色、spawn provider、配置与状态可读性、浏览器 bundle、上游锁文件。每项检查输出一行 PASS/WARN/FAIL 及修复建议，绝不修改任何内容。如何解读与汇报见 omd-doctor 技能。',
     'tool.omd_lsp.description': '向语言服务器查询定义、引用、实现或悬停信息。',
     'tool.omd_diagnostics.description': '运行 .omd/config.jsonc 中 diagnostics.commands 配置的诊断命令。',
     'tool.omd_ui_status.description':
@@ -172,7 +172,7 @@ export const MESSAGES = {
     'skill.omd-visual-qa.whenToUse': '在评审 UI 截图、设计稿对比或视觉验收时使用。',
     'skill.omd-doctor.description': '诊断 Oh-My-DSH 安装情况，并输出带修复建议的 PASS/WARN/FAIL 报告。',
     'skill.omd-doctor.whenToUse':
-      '在安装或更新 OMD bundle 之后、发现预设/工具/命令/技能疑似缺失时，或准备汇报 OMD 运行正常之前使用。',
+      '在安装或更新 OMD bundle 之后、发现工具/命令/技能疑似缺失时、怀疑旧安装遗留了按角色注册的 preset 时，或准备汇报 OMD 运行正常之前使用。',
     'skill.omd-frontend.description': '以设计意图、无障碍与响应式行为为准，构建或评审界面。',
     'skill.omd-frontend.whenToUse': '用于 visual-engineering 任务、组件开发、样式调整或界面评审。',
     'skill.omd-refactor.description': '在保持行为不变、先有基线测试、差异最小的前提下重构。',

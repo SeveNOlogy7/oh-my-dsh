@@ -108,7 +108,7 @@ export function createMiscTools(runtime) {
       'omd_doctor',
       t(
         'tool.omd_doctor.description',
-        'Run report-only Oh-My-DSH diagnostics: required services, preset registration, spawn provider, config and state readability, browser bundle, upstream lock. Returns one PASS/WARN/FAIL line per check with a fix, and never edits anything. The omd-doctor skill tells you how to read and report it.',
+        'Run report-only Oh-My-DSH diagnostics: required services, that no per-role preset is left registered, the session role, spawn provider, config and state readability, browser bundle, upstream lock. Returns one PASS/WARN/FAIL line per check with a fix, and never edits anything. The omd-doctor skill tells you how to read and report it.',
       ),
       { type: 'object', properties: {}, additionalProperties: false },
       async (_args, exec) => {
@@ -280,7 +280,21 @@ export function createMiscTools(runtime) {
           lines.push(`graph failed: ${error?.message ?? error}`)
         }
         try {
-          const entries = ctx.get('loader')?.entries?.() ?? []
+          // `loader.entries()` is a generator in cordis-plugin-loader, and a
+          // wrapped loader may hand back a Map or another iterable. Normalize
+          // before using array methods: calling `.filter` on the generator made
+          // this scan report `loader scan failed: mine.map(...).join is not a
+          // function` and hid the loader rows entirely.
+          const raw = ctx.get('loader')?.entries?.() ?? []
+          const entries = Array.isArray(raw)
+            ? raw
+            : raw instanceof Map
+              ? [...raw.values()]
+              : typeof raw?.[Symbol.iterator] === 'function'
+                ? [...raw]
+                : typeof raw?.toArray === 'function'
+                  ? raw.toArray()
+                  : []
           const mine = entries.filter((entry) => {
             const name = entry?.options?.name
             return typeof name === 'string' && (name.includes(UI_PACKAGE) || name.includes('oh-my-dsh'))

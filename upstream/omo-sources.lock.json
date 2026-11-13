@@ -38,7 +38,7 @@
         "packages/omo-opencode/src/shared/agent-tool-restrictions.ts",
         "packages/prompts-core/prompts"
       ],
-      "omd_target": "src/agents, src/agents/prompts, prompts/agents",
+      "omd_target": "src/agents, prompts/agents",
       "port_status": "reimplemented",
       "port_note": "Eleven roles, their boundaries, and their output contracts are re-expressed as DSH agent presets. Prompt text is newly written."
     },
@@ -68,7 +68,7 @@
       "upstream_paths": [
         "packages/omo-opencode/src/hooks/keyword-detector"
       ],
-      "omd_target": "src/hooks/keyword.js, src/hooks/mode.js, prompts/modes",
+      "omd_target": "src/hooks/keyword.js, prompts/modes",
       "port_status": "reimplemented",
       "port_note": "DSH has no message-transform hook; the detector observes committed user messages and a per-agent prompt section carries the mode protocol. mass ulw is not part of 4.19.4."
     },

@@ -5,7 +5,11 @@ function formatEvent(event) {
   const type = event?.type
   const data = event?.data ?? {}
   if (type === 'user/message') {
-    const text = textOf(data.message)
+    // `user/message` records the message itself as the event data; the
+    // `{..., message}` wrapper only exists on assistant/system/tool records.
+    // Reading it here dropped every human turn from the transcript the model
+    // reads back with `omd_session_read`.
+    const text = textOf(data)
     return text ? `user: ${text}` : null
   }
   if (type === 'assistant/message') {

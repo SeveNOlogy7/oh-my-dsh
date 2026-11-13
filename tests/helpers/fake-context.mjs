@@ -1,7 +1,29 @@
 import path from 'node:path'
-import { AGENT_IDS, presetIdFor } from '../../src/agents/registry.js'
+import { roleLabelFor } from '../../src/agents/registry.js'
 
-export function createFakeContext({ cwd, agentPreset = 'omd-sisyphus' } = {}) {
+/**
+ * The descriptor event a delegated child carries, as `resolveDescriptorRole`
+ * reads it: the role travels on the durable creation `label`, because the
+ * subagent composition accepts no OMD-specific field and its `persona` is only
+ * replayed on cold resume.
+ *
+ * The label is built with the production writer rather than a literal, so this
+ * fixture cannot drift away from what `delegate.js`/`lookat.js` actually write.
+ * Without that, the two ends of the channel would be joined only by whichever
+ * test happens to assert the prefix.
+ */
+export function descriptorEvent(role, category = null) {
+  return { type: 'subagent/descriptor', data: { version: 3, mode: 'continuable', provider: 'spawn', label: roleLabelFor(role, category) } }
+}
+
+/**
+ * `events` are the session's OWN events — what `ownEvents()` answers with. Pass
+ * `descriptorEvent(role)` to give the session a role through the delegation
+ * channel, or a bare `role` to do the same thing more directly. Omitting both
+ * leaves the session role-less, which is the capability-only identity.
+ */
+export function createFakeContext({ cwd, agentPreset = 'standard', events, role } = {}) {
+  const ownEvents = events ?? (role ? [descriptorEvent(role)] : [])
   const state = {
     tools: [],
     restrictions: [],
@@ -13,6 +35,7 @@ export function createFakeContext({ cwd, agentPreset = 'omd-sisyphus' } = {}) {
     listeners: new Map(),
     followups: [],
     steers: [],
+    modelSelections: [],
     activations: [],
     settled: [],
   }
@@ -104,14 +127,20 @@ export function createFakeContext({ cwd, agentPreset = 'omd-sisyphus' } = {}) {
     sessions: {
       get() {
         // The real record is a live Session: an immutable creation header plus
-        // the events appended afterwards (`agent-preset/selected` is the one the
-        // active-preset readers need).
-        return { header: { agentPreset, delegationDepth: 0, cwd }, ownEvents() { return [] } }
+        // the events appended afterwards. `agent-preset/selected` is what the
+        // active-preset readers need, and `subagent/descriptor` is what the role
+        // reader needs.
+        return { header: { agentPreset, delegationDepth: 0, cwd }, ownEvents() { return ownEvents } }
       },
     },
     sessionQuery: {
+      // Reads the session's OWN events through `this` on purpose: DSH's real
+      // `readSession` is a class method reading `this._corpus`, so a caller that
+      // extracts it and calls it detached throws here too. That is what makes
+      // the disk fallbacks in `src/state/active-*.js` genuinely exercised.
+      events: ownEvents,
       async listSessions() { return [{ header: { id: 's1', cwd, createdAt: Date.now() }, live: true }] },
-      async readSession() { return { session: { id: 's1', cwd, createdAt: Date.now() }, events: [] } },
+      async readSession() { return { session: { id: 's1', cwd, createdAt: Date.now() }, events: this.events } },
       async searchSessions() { return { items: [] } },
       async searchEvents() { return { items: [] } },
     },
@@ -135,7 +164,11 @@ export function createFakeContext({ cwd, agentPreset = 'omd-sisyphus' } = {}) {
       async sendMessage() { return 'msg-1' },
     },
     agentPresets: {
-      async list() { return AGENT_IDS.map((id) => ({ id: presetIdFor(id) })) },
+      // OMD registers no preset of its own any more: the picker lists every
+      // registered preset and offers no way to hide one, so eleven per-role
+      // entries could only mislead. Only the deployment's own presets remain,
+      // and those belong to the host, not to this fake.
+      async list() { return [] },
     },
     goals: { get() { return undefined } },
     lsp: { async query() { return { kind: 'locations', locations: [] } } },
@@ -186,6 +219,17 @@ export function createFakeContext({ cwd, agentPreset = 'omd-sisyphus' } = {}) {
   const agent = {
     id: 'session-1',
     ctx: agentCtx,
+    options: {},
+    session: { header: { cwd } },
+    inbox: { nextTurn: [], nextStep: [] },
+    model: {
+      current() {
+        return state.modelSelections.at(-1) ?? undefined
+      },
+      select(selection) {
+        state.modelSelections.push(selection)
+      },
+    },
     followup(message) { state.followups.push(message) },
     steer(message) { state.steers.push(message) },
   }
@@ -201,6 +245,16 @@ export async function emit(ctx, event, ...args) {
   return results
 }
 
+/**
+ * Drive a waterfall event the way the real loop does: `await listener(payload, next)`.
+ *
+ * The terminal `next()` must be awaited, not merely returned. Without the
+ * `await` the helper resolves to whatever the last listener returned *before*
+ * its `next()` settled — the pre-decision value — so a listener that does its
+ * work around `next()` would look like it ran while its hook body never
+ * executed. DSH's own loop awaits it, so a test that does not would silently
+ * pass without exercising the hook at all.
+ */
 export async function emitWaterfall(ctx, event, ...args) {
   const listeners = ctx.state.listeners.get(event) ?? []
   let index = 0
@@ -210,5 +264,5 @@ export async function emitWaterfall(ctx, event, ...args) {
     index += 1
     return listener(...args.slice(0, -1), next)
   }
-  return next()
+  return await next()
 }

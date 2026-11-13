@@ -201,12 +201,17 @@ test('the Client asset is a top-level row the Loader scan can resolve', async ()
   assert.notEqual(uiManifest.name, pkg.name, 'the asset must not reuse the runtime package name')
 
   const patches = pkg.dsh.bundle.patch
-  // Eleven preset rows, the single top-level runtime row, and the asset row.
+  // Two rows only: the top-level runtime row and the browser asset row. The
+  // per-role preset rows are gone, because a registered preset cannot be hidden
+  // from DSH's picker and a preset cannot be switched once a session's first
+  // turn starts — so eleven of them only misled users. The role now travels on
+  // the delegation descriptor's label instead.
   assert.equal(
     patches.length,
-    AGENT_IDS.length + 2,
-    'patch list must hold every preset, the runtime row, and the browser asset row',
+    2,
+    'patch list must hold exactly the runtime row and the browser asset row',
   )
+  assert.equal(patches[0], './presets/omd-runtime.patch.yml', 'the runtime row stays first')
   assert.equal(patches[patches.length - 1], './presets/omd-ui.patch.yml', 'the asset row stays last')
 
   // The runtime row is mounted once for the whole profile and must therefore
@@ -220,21 +225,16 @@ test('the Client asset is a top-level row the Loader scan can resolve', async ()
   )
   assert.ok(!/^\s+agent:/m.test(runtimePatch), 'the runtime row must not pin an agent')
 
-  // A row naming a module the installed DSH cannot start leaves its preset
-  // audited as broken, and the picker hides a broken preset — so every primary
-  // role silently disappeared from the new-session selector. The old generator
-  // inserted this subpath; the shipped composition no longer loads it.
+  // No per-role preset file may come back. Each one was a redundant copy of the
+  // native `standard` tool set, and registering it is what put eleven unusable
+  // entries in the picker. The role table still owns the roster; it just no
+  // longer publishes one preset per role.
   for (const id of AGENT_IDS) {
     const relative = `presets/omd-${id}.patch.yml`
-    assert.ok(patches.includes(`./${relative}`), `${relative} must be in the patch list`)
-    const text = await read(relative)
-    assert.ok(
-      !text.includes('dsh-tool-subagent-control/list-agents'),
-      `${relative} mounts a row the installed DSH cannot start`,
+    await assert.rejects(
+      fs.access(path.join(root, relative)),
+      `${relative} must not exist: per-role presets are no longer generated`,
     )
-    // The preset id is what tells the runtime which role it is serving, so the
-    // preset itself must stay free of a nested runtime row.
-    assert.ok(!/^\s+- id: omd$/m.test(text), `${relative} must not nest the runtime row`)
   }
 
   const uiPatch = await read(patches[patches.length - 1])
@@ -269,16 +269,23 @@ test('the Client asset is a top-level row the Loader scan can resolve', async ()
   )
   // The Client context refuses a property access it was not injected with, and
   // the failure only appears when the page is opened in a browser, so the list
-  // is asserted here: `remote.commands` is a separate declaration from `remote`,
-  // and omitting it broke the settings page with a runtime error.
+  // is asserted here. The settings page reaches its Host half over a same-origin
+  // `fetch` to `api/omd/config` (a browser global, no Client service), so the
+  // list is exactly the slots plus the two services the page reads: `locale` for
+  // its dictionary and `sessions` for the workspace it shows. Borrowing
+  // `remote.commands` is what made every page mount append command records to
+  // the live session log, so it must stay out of this list.
   // The plugin-level list is the only `inject: [...]` in the file; the slot
   // registration's option is the `inject: () => ({...})` form.
   const injectLiteral = /\binject: \[([^\]]*)\]/.exec(source)
   assert.ok(injectLiteral, 'client.js must declare the services it injects')
   const injectedServices = [...injectLiteral[1].matchAll(/'([^']+)'/g)].map((match) => match[1])
-  for (const service of ['slots', 'locale', 'sessions', 'remote', 'remote.commands']) {
-    assert.ok(injectedServices.includes(service), `client.js must inject ${service}`)
-  }
+  assert.deepEqual(
+    injectedServices,
+    ['slots', 'locale', 'sessions'],
+    'client.js injects exactly the slots plus the locale and sessions services',
+  )
+  assert.ok(!injectedServices.includes('remote.commands'), 'the settings page must not drive the command plane')
 
   const commandSource = await read('src/commands/index.js')
   const listLiteral = /const COMMANDS = \[([^\]]*)\]/.exec(source)
@@ -297,11 +304,11 @@ test('the Client asset is a top-level row the Loader scan can resolve', async ()
   assert.ok(!registered.includes('omd-doctor'), 'client.js must not render the removed doctor command')
 })
 
-test('the roster keeps the four primaries selectable and marks subagents as delegation targets', () => {
-  // DSH's picker lists every registered preset — `PresetDefinition` has no
-  // hidden/selectable field, and a delegated child needs its preset registered
-  // because the subagent service mounts it by id. Order plus the description
-  // marker is therefore the only available way to show the hierarchy.
+test('the role table keeps the four primaries distinct from the seven delegation targets', () => {
+  // The role table is no longer published as one preset per role, so `mode` no
+  // longer decides what the picker shows. It still decides who may drive a
+  // session and who is only ever a delegation target, and `order` still fixes
+  // the roster the delegation tools and the doctor report read.
   const primaries = AGENT_IDS.filter((id) => AGENTS[id].mode === 'primary')
   const subagents = AGENT_IDS.filter((id) => AGENTS[id].mode === 'subagent')
   assert.deepEqual(primaries, ['sisyphus', 'hephaestus', 'prometheus', 'atlas'])
@@ -322,7 +329,7 @@ test('the roster keeps the four primaries selectable and marks subagents as dele
   }
   assert.ok(
     Math.max(...primaries.map((id) => AGENTS[id].order)) < Math.min(...subagents.map((id) => AGENTS[id].order)),
-    'primaries must sort before subagents in the picker',
+    'primaries must sort before subagents in the roster',
   )
   for (const id of subagents) {
     assert.equal(canDelegate(id), false, `${id} must not delegate further`)
@@ -330,4 +337,17 @@ test('the roster keeps the four primaries selectable and marks subagents as dele
   for (const id of primaries) {
     assert.ok(allowedSubagents(id).length > 0, `${id} must have delegation targets`)
   }
+})
+
+test('the declared DSH range names the builds the role channel was verified on', () => {
+  // DSH reads `engines.dsh` alone (falling back to @deepseek-ai/dsh peers) and
+  // evaluates it with `includePrerelease`, so a plain `<0.3.0` upper bound would
+  // still admit `0.3.0-alpha.1`. The caret form expands to `<0.3.0-0`, which
+  // excludes the whole next minor while keeping the prereleases in this one.
+  //
+  // This range IS the compatibility claim, so it is pinned rather than derived:
+  // widening it is a deliberate act that requires re-running the verification
+  // recorded in docs/verification.md, not a side effect of a version bump.
+  assert.equal(pkg.engines?.dsh, '^0.2.1-rc.5')
+  assert.equal(pkg.engines?.node, '>=22.13.0')
 })

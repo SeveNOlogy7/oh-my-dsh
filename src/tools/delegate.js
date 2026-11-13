@@ -1,5 +1,5 @@
-import { canDelegate, isSubagentAllowed } from '../agents/registry.js'
-import { categorySettings, isPlainObject, routeFor } from '../core/config.js'
+import { canDelegate, getAgent, isSubagentAllowed, roleLabelFor } from '../agents/registry.js'
+import { categorySettings, isPlainObject, normalizeChildPreset, routeFor } from '../core/config.js'
 import { isCategory } from '../agents/categories.js'
 import { parseDoneClaim } from '../agents/result.js'
 import { text } from '../i18n/index.js'
@@ -72,6 +72,7 @@ function renderRecord(record, extra = '') {
     record.started_at ? `started_at: ${record.started_at}` : null,
     record.finished_at ? `finished_at: ${record.finished_at}` : null,
     record.error ? `error: ${record.error}` : null,
+    record.continuation_accepted ? 'note: continued; the result arrives as a completion notice, so the record cannot report progress' : null,
   ].filter(Boolean)
   if (record.output) lines.push('', 'output:', truncate(record.output))
   if (record.structured) lines.push('', 'structured:', JSON.stringify(record.structured, null, 2))
@@ -131,7 +132,24 @@ export function createDelegateTools(runtime) {
         if (!providers.includes('spawn')) throw new Error('the spawn subagent provider is unavailable')
 
         const target = args.subagent_type ?? args.category
-        const preset = args.subagent_type ? `omd-${args.subagent_type}` : 'omd-sisyphus-junior'
+        // The child's role rides on the descriptor label, and the role is not the
+        // target: a category names an execution profile, and `omd:quick` would
+        // resolve to no role at all, so category work runs as the junior role.
+        //
+        // `||`, not `??`: an empty `subagent_type` passes the guards above
+        // (they test truthiness) and `??` would keep the empty string, making
+        // `roleLabelFor` return `null` — a label DSH's own descriptor reader
+        // requires to be a string, which would leave the child unresumable.
+        const role = args.subagent_type || 'sisyphus-junior'
+        // An unknown role would be written into the descriptor label verbatim
+        // and then resolve to no role at all, so the child would silently run
+        // capability-only. Fail the call instead, where the caller can see it.
+        if (!getAgent(role)) {
+          throw new Error(`unknown subagent_type: ${role}`)
+        }
+        // The preset is not the role channel any more: it is a per-workspace
+        // choice that defaults to inheriting the parent's.
+        const childPreset = normalizeChildPreset(state.config.delegation.childPreset)
         const category = args.category ?? null
         const route = routeFor(state.config, {
           agentId: args.subagent_type,
@@ -170,8 +188,13 @@ export function createDelegateTools(runtime) {
           }
           const messageId = await subagents.sendMessage(parent, childId, blocks, { signal: exec.signal })
           if (record) {
+            // OMD has no completion channel for a continued child: `sendMessage`
+            // returns a message id, and the child's next result arrives as a
+            // completion notice in the parent's inbox. Claiming `running` made the
+            // board report a finished child as active forever; `unknown` is the
+            // same status a restart already assigns to a record it cannot observe.
             registry.update(record.task_id, {
-              status: 'running',
+              status: 'unknown',
               continuation_accepted: true,
               error: null,
               finished_at: null,
@@ -179,7 +202,7 @@ export function createDelegateTools(runtime) {
             await registry.persist(registry.get(record.task_id))
           }
           await runtime.ledger(state.cwd, { event: 'delegate-continued', task: args.task_id ?? childId, child: childId })
-          return `accepted message ${messageId} for ${args.task_id ?? childId}; the child's completion notice or omd_background_output will carry the result.`
+          return `accepted message ${messageId} for ${args.task_id ?? childId}; the child's completion notice carries the result and the record reports \`unknown\` (OMD cannot observe a continued run).`
         }
 
         const background = args.run_in_background ?? state.config.delegation.defaultBackground
@@ -197,12 +220,16 @@ export function createDelegateTools(runtime) {
           if (exec.signal?.aborted) throw new Error('delegation aborted before start')
           return subagents.startActivation({
             provider: 'spawn',
-            label: `omd:${target}`,
+            label: roleLabelFor(role, category),
             request: {
               cwd: state.cwd,
               prompt: blocks,
               parent,
-              agentPreset: preset,
+              // Conditional spread, not `agentPreset: childPreset`: the key must be
+              // absent so that `request.agentPreset` reads `undefined` and DSH
+              // takes its `composeFrom` path instead of mounting a named preset —
+              // that path is the whole point of the null default.
+              ...(childPreset ? { agentPreset: childPreset } : {}),
               agentOptions: Object.keys(agentOptions).length ? agentOptions : undefined,
               outputSchema: isPlainObject(args.output_schema) ? args.output_schema : undefined,
               maxDepth,

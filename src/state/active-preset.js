@@ -43,10 +43,14 @@ export async function resolveActivePreset(ctx, agent) {
   const fromLive = lastSelected(ownEventsOf(live))
   if (fromLive) return fromLive
 
-  const readSession = ctx.get('sessionQuery')?.readSession
-  if (typeof readSession === 'function') {
+  // `readSession` is a class method that reads `this._corpus`, so it must keep
+  // its receiver: extracting it into a local and calling it detached throws a
+  // TypeError that the surrounding catch swallowed as "no answer", which is why
+  // the disk fallback never worked.
+  const query = ctx.get('sessionQuery')
+  if (query && typeof query.readSession === 'function') {
     try {
-      const snapshot = await readSession(agent?.id)
+      const snapshot = await query.readSession(agent?.id)
       const fromLog = lastSelected(snapshot?.events ?? [])
       if (fromLog) return fromLog
     } catch {

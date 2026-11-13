@@ -11,7 +11,7 @@ Current state at the time of writing:
   taken by an unrelated, unmaintained `0.1.7` package, which is why a scope is
   required; `publishConfig.access` is `"public"`, which a scoped package needs to
   be publicly installable.
-- The preset patches under `presets/` embed this package's module specifier,
+- The Loader-row patches under `presets/` embed this package's module specifier,
   generated from `package.json`'s `name` by `scripts/generate-presets.mjs`, so a
   rename always means regenerating them in the same commit. Step 1 keeps that
   procedure for the next rename; it is already applied for the current name.
@@ -46,22 +46,28 @@ itself must change first.
    marked private. That flag exists only so the GitHub-only phase cannot be
    published by accident.
 
-3. Regenerate the preset patches. This is a functional step, not a cosmetic
+3. Regenerate the Loader-row patches. This is a functional step, not a cosmetic
    one:
 
    ```
    npm run generate:presets
    ```
 
-   The eleven agent-preset rows under `presets/` reach this package through a
+   The two rows under `presets/` — the profile-level runtime row `omd-runtime`
+   and the browser asset row `omd-ui` — reach this package through a
    module specifier, and the generator derives that specifier from
    `package.json`'s `name`. The specifier is resolved from the profile's
    `node_modules`, so leaving a stale value after a scoped rename would leave
-   all eleven presets mounting a module that cannot resolve. The bare name is
+   both rows mounting a module that cannot resolve. The bare name is
    not a safe fallback either: the unrelated, unmaintained `oh-my-dsh` package
    that occupies that name on npm could be resolved instead. The rename
    rewrites every patch file under `presets/`; commit them together with
    the manifest.
+
+   OMD registers no per-role preset, so there is no eleventh row to regenerate:
+   the generator emits exactly these two files, and `scripts/check.mjs` fails the
+   build if `dsh.bundle.patch` lists anything else or if the runtime row pins an
+   `agent`.
 
    The `private` assertions in `scripts/check.mjs` and
    `scripts/check-version.mjs` contradict step 2, so the same release commit
@@ -226,9 +232,14 @@ url: https://github.com/SeveNOlogy7/oh-my-dsh
 name: SeveNOlogy7/oh-my-dsh
 category: workflow
 description:
-  en: Agent orchestration for DeepSeek Harness with eleven selectable presets, planning, delegation, review gates and durable project state.
-  zh: 面向 DeepSeek Harness 的智能体编排插件：11 个可选 preset、规划、委派、评审门与 .omd 持久状态。
+  en: Agent orchestration for DeepSeek Harness with eleven agent roles, planning, delegation, review gates and durable project state.
+  zh: 面向 DeepSeek Harness 的智能体编排插件：11 个智能体角色、规划、委派、评审门与 .omd 持久状态。
 ```
+
+The same two strings ship as the plugin row's `meta.description` in
+`locale/en.json` and `locale/zh.json`, which is what the DSH plugin list shows.
+A wording change belongs in both places in one commit; the strings here and
+there must stay equal.
 
 Field rules:
 
@@ -275,7 +286,7 @@ A PR for a plugin that is not on npm is rejected or left unlisted.
 - [ ] `npm whoami` returns the expected account.
 - [ ] `package.json` has `name: @jhcai11/oh-my-dsh` and no `private` field.
 - [ ] `version`, `dsh`, `exports`, and `files` are unchanged by the rename.
-- [ ] `npm run generate:presets` was run and the twelve `presets/` patches are
+- [ ] `npm run generate:presets` was run and the two `presets/` patch files are
       committed with the rename.
 - [ ] The `private: true` assertion in `scripts/check.mjs` was updated in the
       same commit.

@@ -9,7 +9,7 @@ harness's own `/goal` stays available.
 |---|---|---|
 | `/omd-init` | — | Creates `.omd/` directories, a commented `config.jsonc`, `.gitignore`, README, and rules README. Never overwrites existing files. |
 | `/omd-status` | — | Text status board. |
-| `/omd-config` | `set <json>` | Resolved config, contributing sources, and parse diagnostics. `set <json>` merges a validated patch into the session workspace's `.omd/config.jsonc` and answers with the new state. |
+| `/omd-config` | `set <json>` or `set {"patch":…,"unset":…}` | Resolved config, contributing sources, and parse diagnostics as a JSON envelope. `set` merges a validated patch into the session workspace's `.omd/config.jsonc`, deletes the key paths it is given, and answers with the new state. |
 | `/omd-ulw` | `<goal>` | Sets ultrawork mode and starts a turn with the goal. |
 | `/omd-plan` | `<goal>` | Sets planning mode; interview and draft. |
 | `/omd-hyperplan` | `<goal>` | Sets hyperplan mode; five adversarial lanes. |
@@ -21,7 +21,13 @@ harness's own `/goal` stays available.
 | `/omd-refactor` | `<target>` | Sends the behavior-preserving refactor protocol. |
 | `/omd-remove-ai-slops` | — | Sends the comment/noise cleanup protocol. |
 
-Commands that start work use `agent.followup()` with a user-role message.
+Commands that start work use `agent.followup()` with a complete user-role
+message — `{id, role: 'user', content, source}`. DSH persists that object
+verbatim as a `user/message` record and does not fill in a missing `role` or
+`id`; a partial message therefore poisons the session, because the provider
+rejects every later request with `Unsupported message role: undefined`. OMD
+builds these messages in `src/core/message.js`.
+
 Their UI result is a receipt; the model receives the protocol through the
 message and the active mode's system-prompt section.
 
@@ -43,13 +49,30 @@ favor of the `omd-doctor` skill: every OMD role carries it, and it drives the
 reports them in the conversation, so a diagnosis and its repair happen in one
 turn instead of the user having to re-prompt after reading a command row.
 
-`/omd-config` is the one command that writes. Its `set <json>` form validates the
-patch against `schema/omd-config.schema.json` before touching the file; a
-rejected value settles as an error result carrying the validator's own message,
-and the file is left byte-identical. The settings page
-(`Settings → Oh-My-DSH`) drives both forms through
-`ctx.remote.commands.execute`, which is why it needs a live OMD session.
+`/omd-config` is the one command that writes. Both write forms validate against
+`schema/omd-config.schema.json` before touching the file; a rejected value
+settles as an error result carrying the validator's own message, and the file is
+left byte-identical.
 
-Read-only subagent presets expose only `omd-init`, `omd-status`, `omd-config`,
-`omd-handoff`, and `omd-stop-continuation`. A session on any other preset
-resolves to capability-only and is not restricted this way.
+- `set <json object>` merges the object into the session workspace's
+  `.omd/config.jsonc`.
+- `set {"patch": {...}, "unset": [["delegation","maxConcurrent"]]}` is the same
+  write plus key paths to delete from that file. Both keys are optional and at
+  least one must be non-empty; an `unset` path the file does not set is a no-op
+  (it may be inherited), the patch wins wherever the two touch the same or an
+  overlapping path, and a removal that empties an object prunes it. The answer's
+  `write` object reports `mode`, the patched key paths in `keys`, and the paths
+  actually removed in `unset`.
+
+The settings page (`Settings → OMD`) drives both forms over its own endpoint,
+`api/omd/config`: it posts the `/omd-config …` line the parser reads, so the page
+and a human typed command share one parser and one envelope contract without
+executing anything in a session. See `docs/configuration.md`.
+
+A row that pins a **subagent** role (`oracle`, `librarian`, `explore`,
+`multimodal-looker`, `metis`, `momus`, `sisyphus-junior`) registers only
+`omd-init`, `omd-status`, `omd-config`, `omd-handoff`, and
+`omd-stop-continuation`; a row that pins a primary role registers all of them.
+The bundle's own `omd-runtime` row pins no role — it is mounted once for the
+whole profile — so it registers the whole command set and lets each session's
+resolved role decide what is usable.

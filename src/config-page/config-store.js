@@ -3,25 +3,32 @@
  *
  * The page cannot touch the filesystem: it runs in the browser. Everything in
  * this module runs on the Host inside the `/omd-config` command, which the
- * preset plugin already mounts per OMD agent, so the workspace is the session's
- * own working directory and needs no discovery.
+ * profile-level OMD runtime row registers per agent, so the workspace is the
+ * session's own working directory and needs no discovery.
  *
  * Contract used by the page (see `src/commands/index.js`):
- * - `read()` returns the effective configuration, every contributing layer, the
- *   parse diagnostics, and the file's own raw object.
- * - `write(patch)` merges one partial patch, rejects invalid values with the
- *   schema validator's own message, and splices the change into the file text so
- *   comments and trailing commas survive. The file is written without a BOM.
+ * - `read()` returns the effective configuration, every contributing layer with
+ *   the top-level keys it sets, the parse diagnostics, and the file's own raw
+ *   object. `src/core/defaults.js` holds the defaults, which the page shows as
+ *   the inherited value of a key that no layer sets.
+ * - `write(patch, unset)` merges one partial patch and deletes the `unset` key
+ *   paths, rejects invalid results with the schema validator's own message, and
+ *   splices both changes into the file text so comments and trailing commas
+ *   survive. A removal only ever addresses the workspace file: a key inherited
+ *   from a user or ancestor layer is not this page's to delete, and removing the
+ *   file's own value is exactly what makes the inherited one apply again.
+ *   The file is written without a BOM.
  */
 import os from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { isDeepStrictEqual } from 'node:util'
 import { readTextSafe, writeTextAtomic } from '../core/atomic.js'
-import { loadConfig, isPlainObject, mergeDeep } from '../core/config.js'
+import { loadConfig, clone, isPlainObject, mergeDeep } from '../core/config.js'
 import { parseJsonc } from '../core/jsonc.js'
 import { TOP_LEVEL_KEYS } from '../core/defaults.js'
-import { applyPathUpdates } from './jsonc-spans.js'
-import { collectProblems, validate } from './schema.js'
+import { applyPathRemovals, applyPathUpdates, dropNestedPaths } from './jsonc-spans.js'
+import { collectProblems } from './schema.js'
 
 const DEFAULT_SCHEMA_FILE = fileURLToPath(new URL('../../schema/omd-config.schema.json', import.meta.url))
 const BLOCKED_KEYS = new Set(['__proto__', 'prototype', 'constructor'])
@@ -70,6 +77,152 @@ function unknownTopLevelKeys(patch) {
   return Object.keys(patch).filter((key) => key !== '$schema' && !TOP_LEVEL_KEYS.includes(key))
 }
 
+/** Describe a payload value the way the usage messages do. */
+function describePayload(value) {
+  if (value === null) return 'null'
+  if (Array.isArray(value)) return 'array'
+  if (typeof value === 'string') return `string ${JSON.stringify(value)}`
+  if (typeof value === 'object') return 'object'
+  return String(value)
+}
+
+/**
+ * Validate the structured `unset` payload: an array of key paths, each an array
+ * of non-empty key names.
+ *
+ * A dotted string (`"delegation.maxConcurrent"`) is refused rather than split:
+ * a configuration key may itself contain a dot, so only the array form says
+ * unambiguously which key each segment names.
+ * @param value - the payload, `undefined` when the form carried no `unset`.
+ * @returns `{ok:true, paths}` or `{ok:false, reason}` for a usage message.
+ */
+export function normalizeUnsetPaths(value) {
+  if (value === undefined) return { ok: true, paths: [] }
+  if (!Array.isArray(value)) {
+    return {
+      ok: false,
+      reason: `unset must be an array of key paths, each written as an array of key names such as ["delegation","maxConcurrent"] (got ${describePayload(value)})`,
+    }
+  }
+  const paths = []
+  for (const entry of value) {
+    if (!Array.isArray(entry)) {
+      return {
+        ok: false,
+        reason: `each unset path must be an array of key names such as ["delegation","maxConcurrent"] (got ${describePayload(entry)})`,
+      }
+    }
+    if (entry.length === 0) return { ok: false, reason: 'an unset path must name at least one key' }
+    if (!entry.every((segment) => typeof segment === 'string' && segment.trim() !== '')) {
+      return { ok: false, reason: `every unset path segment must be a non-empty string (got ${JSON.stringify(entry)})` }
+    }
+    const path = entry.map((segment) => segment.trim())
+    const blocked = path.find((segment) => BLOCKED_KEYS.has(segment))
+    if (blocked !== undefined) return { ok: false, reason: `an unset path cannot name ${blocked}` }
+    paths.push(path)
+  }
+  return { ok: true, paths }
+}
+
+/** Value at an object-key path, or `undefined` when the path is not there. */
+function getPath(document, path) {
+  let node = document
+  for (const segment of path) {
+    if (!isPlainObject(node) || !Object.hasOwn(node, segment)) return undefined
+    node = node[segment]
+  }
+  return node
+}
+
+/** True when `document` sets this object-key path. */
+export function hasPath(document, path) {
+  return Array.isArray(path) && path.length > 0 && getPath(document, path) !== undefined
+}
+
+/** Delete one object-key path, pruning the parent objects the removal emptied. */
+function removeDocumentPath(document, path) {
+  const parent = getPath(document, path.slice(0, -1))
+  if (!isPlainObject(parent)) return false
+  delete parent[path[path.length - 1]]
+  // A removal that empties an object deletes the object too (never the root).
+  // This is tidiness, not semantics: an empty object merges to nothing, so the
+  // resolved configuration is the same either way. Leaving `{"delegation": {}}`
+  // behind would only be noise the next edit has to step around.
+  for (let depth = path.length - 1; depth >= 1; depth -= 1) {
+    const node = getPath(document, path.slice(0, depth))
+    if (!isPlainObject(node) || Object.keys(node).length > 0) break
+    const holder = getPath(document, path.slice(0, depth - 1))
+    if (!isPlainObject(holder)) break
+    delete holder[path[depth - 1]]
+  }
+  return true
+}
+
+/** The file's own document with every removal applied. */
+function withoutPaths(document, paths) {
+  const out = clone(document)
+  for (const path of paths) removeDocumentPath(out, path)
+  return out
+}
+
+/**
+ * Splice removals and then updates into the document text.
+ *
+ * Removals go first so the patch overwrites whatever the removal left behind:
+ * both halves arrive as one request, and the patch is the value the user just
+ * typed, so it must win wherever the two touch the same or an overlapping path.
+ * @returns the new text, or `null` when a span could not be computed.
+ */
+function spliceWrite(source, removals, updates) {
+  let text = source
+  if (removals.length > 0) {
+    const removed = applyPathRemovals(text, removals)
+    if (removed === null) return null
+    text = removed.text
+  }
+  if (updates.length > 0) {
+    const updated = applyPathUpdates(text, updates)
+    if (updated === null) return null
+    text = updated.text
+  }
+  return text
+}
+
+/** True when `text` parses to exactly the validated document. */
+function parsesAs(text, document) {
+  try {
+    return isDeepStrictEqual(parseJsonc(text), document)
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Top-level key sets of every layer that parsed, farthest layer first.
+ *
+ * `loadConfig` answers the merged document and the files it merged, but not
+ * which key came from where; the shared loader in `src/core` must not grow a
+ * page-only field, so each contributing file is read once more here. A layer
+ * that stops parsing between the two reads simply drops out of this audit list
+ * instead of failing the page.
+ */
+async function describeLayers(files) {
+  const layers = []
+  for (const file of files) {
+    const read = await readTextSafe(file)
+    if (!read.ok) continue
+    let value
+    try {
+      value = parseJsonc(read.value, file)
+    } catch {
+      continue
+    }
+    if (!isPlainObject(value)) continue
+    layers.push({ file, keys: Object.keys(value).filter((key) => !BLOCKED_KEYS.has(key)).sort() })
+  }
+  return layers
+}
+
 export function createConfigStore(options = {}) {
   const home = options.home ?? os.homedir()
   const schemaFile = options.schemaFile ?? DEFAULT_SCHEMA_FILE
@@ -97,6 +250,7 @@ export function createConfigStore(options = {}) {
       }
     }
     const loaded = await loadConfig({ workspace: root, home })
+    const layers = await describeLayers(loaded.sources)
     const diagnostics = [...loaded.diagnostics]
     if (!parse.ok) diagnostics.unshift({ path: file, reason: parse.reason, detail: parse.detail })
     return {
@@ -109,6 +263,7 @@ export function createConfigStore(options = {}) {
       fileConfig,
       config: loaded.config,
       sources: loaded.sources,
+      layers,
       diagnostics,
     }
   }
@@ -121,18 +276,33 @@ export function createConfigStore(options = {}) {
   }
 
   /**
-   * Merge one partial patch into the workspace file.
+   * Merge one partial patch into the workspace file and delete the `unset` paths
+   * from it.
    *
    * Validation runs on the merged document so a missing required field inside a
-   * patched object is caught, but only problems on a patched path block the
-   * write: an invalid value the user did not touch (an older file, another
-   * layer) is reported as a pre-existing problem instead of locking the page.
+   * patched or emptied object is caught, but only problems on a touched path
+   * block the write: an invalid value the user did not touch (an older file,
+   * another layer) is reported as a pre-existing problem instead of locking the
+   * page. A blocked write never touches the file, so a rejection is always
+   * recoverable by editing again.
+   *
+   * @param workspace - the session working directory.
+   * @param patch - partial configuration merged over the file's own document.
+   * @param unset - `string[][]` key paths to delete from the file's own document.
+   *   A path the file does not set is a no-op (it may be inherited), and the
+   *   patch wins wherever the two forms touch the same or an overlapping path.
    */
-  async function write(workspace, patch) {
-    if (!isPlainObject(patch) || Object.keys(patch).length === 0) {
+  async function write(workspace, patch, unset) {
+    if (patch !== undefined && patch !== null && !isPlainObject(patch)) {
+      return { ok: false, error: { kind: 'usage', message: 'the patch must be a JSON object of configuration keys' } }
+    }
+    const body = isPlainObject(patch) ? patch : {}
+    const requested = normalizeUnsetPaths(unset)
+    if (!requested.ok) return { ok: false, error: { kind: 'usage', message: requested.reason } }
+    if (Object.keys(body).length === 0 && requested.paths.length === 0) {
       return { ok: false, error: { kind: 'usage', message: 'nothing to write: the patch is empty' } }
     }
-    const unknown = unknownTopLevelKeys(patch)
+    const unknown = unknownTopLevelKeys(body)
     if (unknown.length > 0) {
       return {
         ok: false,
@@ -155,23 +325,46 @@ export function createConfigStore(options = {}) {
       }
     }
 
+    const document = isPlainObject(state.fileConfig) ? state.fileConfig : {}
+    // Only a removal this file actually performs is reported and validated: a
+    // path that is not in the file may be inherited from a layer the page does
+    // not own, or already gone, and either way nothing changes.
+    const removedPaths = dropNestedPaths(requested.paths.filter((path) => hasPath(document, path)))
+    if (Object.keys(body).length === 0 && removedPaths.length === 0) {
+      return {
+        ok: false,
+        error: { kind: 'usage', message: 'nothing to write: none of the requested keys are set in this file' },
+      }
+    }
+
     const schema = await loadConfigSchema(schemaFile)
-    const merged = mergeDeep(state.fileConfig ?? {}, patch)
-    const touched = patchPaths(patch)
+    // Removals land first, so a patch that names the same or a nested path wins.
+    const merged = mergeDeep(withoutPaths(document, removedPaths), body)
+    const keys = patchPaths(body)
+    // A patch whose only content was blocked keys sanitizes to empty parents the
+    // JSONC splicer never emits; writing it would degrade to a whole-document
+    // rewrite for no change. Refuse instead of losing every comment.
+    if (keys.length === 0 && removedPaths.length === 0) {
+      return {
+        ok: false,
+        error: { kind: 'usage', message: 'nothing to write: the patch contains no writable keys (blocked keys are stripped)' },
+      }
+    }
+    const touched = [...keys, ...removedPaths]
     const { blocking, preexisting } = splitProblems(collectProblems(schema, merged), touched)
     if (blocking.length > 0) {
       const first = blocking[0]
       return { ok: false, error: { kind: 'validation', message: first.message, path: first.path.map(String) } }
     }
-    const whole = validate(schema, merged)
-    if (!whole.ok && touched.length === 0) {
-      return { ok: false, error: { kind: 'validation', message: whole.message, path: whole.path.map(String) } }
-    }
 
-    const updates = flattenPatch(patch)
-    const patched = state.text === null ? applyPathUpdates('{}', updates) : applyPathUpdates(state.text, updates)
-    const nextText = patched === null ? `${JSON.stringify(merged, null, 2)}\n` : patched.text
-    const mode = patched === null ? 'rewrite' : state.text === null ? 'create' : 'patch'
+    const spliced = spliceWrite(state.text === null ? '{}' : state.text, removedPaths, flattenPatch(body))
+    // The spliced text is trusted only when it parses back to exactly the
+    // document that was validated: a span the scanner got wrong must degrade to
+    // a comment-losing whole-document rewrite, never to a file whose content
+    // disagrees with the answer the page just showed.
+    const faithful = spliced !== null && parsesAs(spliced, merged)
+    const nextText = faithful ? spliced : `${JSON.stringify(merged, null, 2)}\n`
+    const mode = faithful ? (state.text === null ? 'create' : 'patch') : 'rewrite'
     await writeTextAtomic(state.file, nextText)
 
     const after = await inspect(workspace)
@@ -180,7 +373,11 @@ export function createConfigStore(options = {}) {
     return {
       ok: true,
       ...rest,
-      write: { mode, keys: touched.map((segments) => segments.join('.')) },
+      write: {
+        mode,
+        keys: keys.map((segments) => segments.join('.')),
+        unset: removedPaths.map((path) => path.join('.')),
+      },
       schemaProblems: preexisting.map((problem) => ({ path: problem.path.map(String), message: problem.message })),
     }
   }

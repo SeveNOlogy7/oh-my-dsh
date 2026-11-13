@@ -2,11 +2,17 @@ import path from 'node:path'
 import { promises as fs } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { exists, readJsonSafe, readJsoncSafe, readTextSafe } from '../core/atomic.js'
-import { OMD_DIR, OMO_COMMIT, OMO_VERSION, AGENT_IDS, UI_PACKAGE } from '../core/constants.js'
+import { OMD_DIR, OMO_COMMIT, OMO_VERSION, UI_PACKAGE } from '../core/constants.js'
 import { loadConfig } from '../core/config.js'
 import { omdPath } from '../core/paths.js'
-import { AGENTS, presetIdFor, agentIdFromPreset } from '../agents/registry.js'
+import { presetIdFor, agentIdFromPreset } from '../agents/registry.js'
 import { resolveActivePreset } from './active-preset.js'
+
+/**
+ * The prefix of every per-role preset id OMD used to register, taken from the
+ * registry so the literal is never duplicated here. `presetIdFor('')` is `omd-`.
+ */
+const ROLE_PRESET_PREFIX = presetIdFor('')
 
 function check(id, status, detail, fix) {
   return { id, status, detail, ...(fix ? { fix } : {}) }
@@ -57,25 +63,33 @@ export async function runDoctor({ ctx, agent, workspace, config, agentId, source
   if (ctx.get('agentPresets')?.list) {
     try {
       const presets = await ctx.get('agentPresets').list()
-      const ids = new Set(presets.map((preset) => preset.id))
-      const missingPresets = AGENT_IDS.map(presetIdFor).filter((id) => !ids.has(id))
-      const broken = presets.filter(
+      // The check asserts the absence, not the presence: OMD registers no preset
+      // per role any more, and a registered one cannot be hidden from DSH's
+      // picker or switched once a session's first turn has started. Anything
+      // under the role prefix is therefore a leftover from an older install,
+      // which is exactly what the user has to act on.
+      const leftovers = presets.filter((preset) => preset.id?.startsWith(ROLE_PRESET_PREFIX))
+      const broken = leftovers.filter(
         (preset) =>
-          preset.id?.startsWith('omd-') &&
-          (preset.broken !== undefined || preset.status === 'failed' || preset.error || preset.activationError),
+          preset.broken !== undefined || preset.status === 'failed' || preset.error || preset.activationError,
       )
       checks.push(
-        missingPresets.length || broken.length
+        leftovers.length
           ? check(
               'presets',
               'FAIL',
-              `${missingPresets.length ? `missing: ${missingPresets.join(', ')}; ` : ''}${broken.length ? `broken: ${broken.map((preset) => preset.id).join(', ')}` : ''}`,
-              'Read the per-preset reason from the diagnostics below, then reinstall the Oh-My-DSH bundle and restart.',
+              `${leftovers.length} omd-* preset(s) are registered: ${leftovers.map((preset) => preset.id).join(', ')}; OMD registers none and a role rides the delegation label`,
+              'Remove the per-role preset declarations (an older Oh-My-DSH install generated one per role), reinstall the bundle and restart the app.',
             )
-          : check('presets', 'PASS', `${AGENT_IDS.length} OMD presets registered`),
+          : check(
+              'presets',
+              'PASS',
+              'no omd-* preset is registered; the OMD role rides the delegation label',
+            ),
       )
-      // The picker hides a preset whose activation failed, so its reason must be
-      // readable from the session that can still run omd_doctor.
+      // The picker hides a preset whose activation failed, so a leftover's own
+      // reason must stay readable from the session that can still run
+      // omd_doctor. A healthy non-OMD preset is not OMD's to report.
       for (const preset of broken) {
         const reason = preset.broken ?? preset.error ?? preset.activationError ?? preset.status
         checks.push(
@@ -86,7 +100,9 @@ export async function runDoctor({ ctx, agent, workspace, config, agentId, source
       checks.push(check('presets', 'WARN', `could not list presets: ${error?.message ?? error}`))
     }
   } else {
-    checks.push(check('presets', 'WARN', 'agent preset registry unavailable'))
+    checks.push(
+      check('presets', 'WARN', 'agent preset registry unavailable; cannot check for leftover per-role presets'),
+    )
   }
 
   const clientModules = ctx.get('clientModules')
@@ -106,27 +122,40 @@ export async function runDoctor({ ctx, agent, workspace, config, agentId, source
     checks.push(check('client-half', 'WARN', 'clientModules service unavailable; cannot confirm the UI renderer'))
   }
 
-  // The runtime row is mounted once for the whole profile, so a non-OMD preset
-  // is no longer a degraded state: it is the capability-only identity, which
-  // has the full orchestration surface and no OMD persona. Only a preset that
-  // cannot be read at all is worth a warning.
+  // Two different facts, reported as two rows. `active-preset` reports which
+  // preset the session runs: a preset is not the role channel any more, so the
+  // most it can say is whether it is a plain capability-only one or a per-role
+  // preset left over from an older install. The preset a session cannot be read
+  // for at all is still worth a warning, because it hides the composition.
   const activePreset = await resolveActivePreset(ctx, agent)
-  const activeRole = agentIdFromPreset(activePreset)
+  const legacyRoleFromPreset = agentIdFromPreset(activePreset)
   checks.push(
     activePreset == null
       ? check(
           'active-preset',
           'WARN',
-          'current preset is unknown; capability-only orchestration still applies',
-          'Select a preset, or an OMD preset to also get a role persona.',
+          'current preset is unknown; the OMD role does not depend on it',
+          'Restart the app so the session record is readable, or re-select the preset. The role comes from the delegation channel, not from the preset.',
         )
-      : activeRole
-        ? check('active-preset', 'PASS', `${activePreset} (role: ${activeRole})`)
-        : check(
+      : legacyRoleFromPreset
+        ? check(
             'active-preset',
             'PASS',
-            `${activePreset} (capability-only; orchestration available, no OMD persona)`,
-          ),
+            `${activePreset} (per-role preset from an older install; the delegation label outranks it)`,
+          )
+        : check('active-preset', 'PASS', `${activePreset} (capability-only preset; OMD roles ride the delegation label)`),
+  )
+
+  // `agentId` is the role the runtime resolved for this session: a row that
+  // pins an agent, the child's own `omd:<role>` descriptor label, or a
+  // pre-existing `omd-<role>` preset as the compatibility fallback. The doctor
+  // reports that one resolution instead of deriving a second one, which could
+  // disagree with what the session actually runs as. `null` is the
+  // capability-only identity — a supported state, not a degraded one.
+  checks.push(
+    agentId
+      ? check('active-role', 'PASS', agentId)
+      : check('active-role', 'PASS', 'capability-only (no role persona)'),
   )
 
   const omd = omdPath(workspace)

@@ -87,10 +87,15 @@ after(async () => {
  * Build one scratch workspace and mount the row the way
  * `presets/omd-runtime.patch.yml` does: `apply(ctx, {})`, no `agent` key.
  *
+ * `role` is what the session actually runs as, delivered through the delegation
+ * channel — the durable `subagent/descriptor` label — because OMD no longer
+ * publishes one preset per role. `preset` only seeds the session header, which
+ * is a creation fact the role reader deliberately does not consult.
+ *
  * The workspace config pins the keys these assertions depend on, so a user-level
  * `~/.omd/config.jsonc` cannot change the outcome.
  */
-async function mount({ preset = 'standard', agent, lsp = false } = {}) {
+async function mount({ preset = 'standard', role, agent, lsp = false, config } = {}) {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'omd-global-row-'))
   roots.push(root)
   const workspace = path.join(root, 'project')
@@ -101,10 +106,11 @@ async function mount({ preset = 'standard', agent, lsp = false } = {}) {
       taskSystem: { enabled: false },
       hooks: { prometheusGuard: true, notepadGuard: true },
       delegation: { defaultBackground: false },
+      ...config,
     }),
   )
 
-  const fake = createFakeContext({ cwd: workspace, agentPreset: preset })
+  const fake = createFakeContext({ cwd: workspace, agentPreset: preset, role })
   for (const name of BASE_TOOLS) {
     fake.state.tools.push({ name, description: name, parameters: { type: 'object' } })
   }
@@ -119,8 +125,12 @@ async function mount({ preset = 'standard', agent, lsp = false } = {}) {
   const dispose = apply(fake.ctx, agent === undefined ? {} : { agent })
   await emit(fake.ctx, 'agent/created', { agent: fake.agent })
   await waitFor(() => fake.state.sections.some((section) => section.name === 'deployment:persona-prefix'))
+  // The role is resolved asynchronously off the session's own descriptor, and
+  // the tool policy is applied from whatever the role is at that moment. Await
+  // the load so an assertion sees the settled role instead of a race.
+  await dispose.runtime.stateFor(fake.agent)
 
-  return { ...fake, workspace, dispose }
+  return { ...fake, workspace, dispose, runtime: dispose.runtime }
 }
 
 async function waitFor(predicate, timeoutMs = 3000) {
@@ -155,20 +165,16 @@ function omdNames(names) {
   return names.filter((name) => name.startsWith('omd_')).sort()
 }
 
-test('C4: the preset patch set declares the runtime row exactly once, at the top level, with no agent key', async () => {
+test('C4: the bundle patch set declares the runtime row exactly once, at the top level, with no agent key', async () => {
   const pkg = JSON.parse(await fs.readFile(path.join(ROOT, 'package.json'), 'utf8'))
   const patches = pkg.dsh.bundle.patch
   assert.equal(patches[0], './presets/omd-runtime.patch.yml', 'the runtime row is listed first')
-  assert.equal(patches.length, 13, 'runtime + 11 role presets + the UI asset')
-  assert.deepEqual(
-    patches.slice(1, 12).sort(),
-    ROLE_IDS.map((id) => `./presets/omd-${id}.patch.yml`).sort(),
-  )
-  assert.equal(patches[12], './presets/omd-ui.patch.yml')
+  assert.equal(patches.length, 2, 'the runtime row and the UI asset, and nothing else')
+  assert.equal(patches[1], './presets/omd-ui.patch.yml', 'the UI asset is listed last')
 
   const presetsDir = path.join(ROOT, 'presets')
   const files = (await fs.readdir(presetsDir)).filter((file) => file.endsWith('.patch.yml'))
-  assert.equal(files.length, 13, '11 role presets + runtime + UI')
+  assert.deepEqual(files.sort(), ['omd-runtime.patch.yml', 'omd-ui.patch.yml'].sort())
 
   const pinning = []
   for (const file of files) {
@@ -196,12 +202,14 @@ test('C4: the preset patch set declares the runtime row exactly once, at the top
   assert.doesNotMatch(runtimePatch, /^\s*agent:/m, 'the runtime row must not pin an agent')
   assert.doesNotMatch(runtimePatch, /^\s*config:/m, 'the runtime row carries no config at all')
 
+  // The per-role preset files are gone. `bundle.patch` must not name one, or the
+  // loader would fail on a missing include at startup.
+  const bundlePatch = JSON.parse(await fs.readFile(path.join(ROOT, 'package.json'), 'utf8')).dsh.bundle.patch
   for (const id of ROLE_IDS) {
-    const body = await fs.readFile(path.join(presetsDir, `omd-${id}.patch.yml`), 'utf8')
-    assert.match(body, new RegExp(`id: omd-${id}\\b`), `omd-${id}.patch.yml declares its preset id`)
-    assert.match(body, /name: '@deepseek-ai\/dsh-agent-preset'/)
-    assert.doesNotMatch(body, /oh-my-dsh/, `omd-${id}.patch.yml must not mount the runtime row`)
-    assert.doesNotMatch(body, /^\s*agent:/m, `omd-${id}.patch.yml must not name an agent`)
+    assert.ok(
+      !bundlePatch.includes(`./presets/omd-${id}.patch.yml`),
+      `omd-${id}.patch.yml must not be listed: per-role presets are no longer generated`,
+    )
   }
 })
 
@@ -264,8 +272,8 @@ test('C1: a non-OMD preset gets the orchestration surface, an empty persona, and
 })
 
 test('a host that provides an LSP service adds omd_lsp and nothing else', async () => {
-  const withLsp = await mount({ preset: 'omd-oracle', lsp: true })
-  const withoutLsp = await mount({ preset: 'omd-oracle' })
+  const withLsp = await mount({ role: 'oracle', lsp: true })
+  const withoutLsp = await mount({ role: 'oracle' })
   try {
     const a = omdNames(effectiveTools(withLsp.state))
     const b = omdNames(effectiveTools(withoutLsp.state))
@@ -291,9 +299,9 @@ test('a capability-only session exposes no delegate tool it cannot use', async (
   }
 })
 
-test('C2: each of the eleven OMD presets keeps its historical tool policy', async () => {
+test('C2: each of the eleven roles keeps its historical tool policy', async () => {
   for (const id of ROLE_IDS) {
-    const env = await mount({ preset: `omd-${id}` })
+    const env = await mount({ role: id })
     try {
       const expected = POLICY[id]
       const effective = effectiveTools(env.state)
@@ -428,8 +436,8 @@ test('C3: a preset selected before the first turn changes the persona and starts
   }
 })
 
-test('delegation pins the child preset to omd-<subagent_type>, so all eleven must stay registered', async () => {
-  const env = await mount({ preset: 'omd-sisyphus' })
+test('delegation carries the role on the descriptor label and leaves the child preset to configuration', async () => {
+  const env = await mount({ role: 'sisyphus' })
   try {
     const delegate = env.state.tools.find((tool) => tool.name === 'omd_delegate')
     await delegate.execute(
@@ -437,15 +445,88 @@ test('delegation pins the child preset to omd-<subagent_type>, so all eleven mus
       { agent: env.agent, signal: new AbortController().signal },
     )
     await waitFor(() => env.state.activations.length > 0)
-    assert.equal(env.state.activations[0].request.agentPreset, 'omd-oracle')
+    const first = env.state.activations[0]
+    // The role is the durable label, not a preset: OMD registers no preset per
+    // role any more, so this label is what the child resolves its role from.
+    assert.equal(first.label, 'omd:oracle')
+    // Default configuration omits the preset entirely, which makes the child
+    // inherit the parent's composition through the native `composeFrom` path.
+    // The assertion is on key ABSENCE rather than on `undefined`, because
+    // absence is the honest statement of intent and survives a future DSH that
+    // distinguishes the two. (In this build it does not: the spawn provider
+    // materializes `composition.agentPreset` from `request.agentPreset`, so an
+    // explicit `undefined` takes the same `composeFrom` branch.)
+    assert.equal(
+      Object.hasOwn(first.request, 'agentPreset'),
+      false,
+      'the child preset must be omitted by default so the child inherits the parent',
+    )
 
     await delegate.execute(
       { prompt: 'quick job', category: 'quick', run_in_background: true },
       { agent: env.agent, signal: new AbortController().signal },
     )
     await waitFor(() => env.state.activations.length > 1)
-    assert.equal(env.state.activations[1].request.agentPreset, 'omd-sisyphus-junior')
-    assert.equal(env.state.activations[1].request.prompt[0].text.includes('<omd-delegation target="quick"'), true)
+    const second = env.state.activations[1]
+    assert.equal(second.label, 'omd:sisyphus-junior@quick')
+    assert.equal(Object.hasOwn(second.request, 'agentPreset'), false)
+    assert.equal(second.request.prompt[0].text.includes('<omd-delegation target="quick"'), true)
+  } finally {
+    env.dispose()
+  }
+})
+
+test('delegation.childPreset collapses a stray value into inheritance', async () => {
+  // A non-string or empty value must never become a preset request: it would be
+  // a lookup for something the user never named. Both collapse to "inherit".
+  for (const stray of [true, 42, '', '   ', {}, []]) {
+    const env = await mount({ role: 'sisyphus', config: { delegation: { childPreset: stray } } })
+    try {
+      const delegate = env.state.tools.find((tool) => tool.name === 'omd_delegate')
+      await delegate.execute(
+        { prompt: 'review this', subagent_type: 'oracle', run_in_background: true },
+        { agent: env.agent, signal: new AbortController().signal },
+      )
+      await waitFor(() => env.state.activations.length > 0)
+      assert.equal(
+        Object.hasOwn(env.state.activations[0].request, 'agentPreset'),
+        false,
+        `childPreset ${JSON.stringify(stray)} must collapse to inheritance`,
+      )
+    } finally {
+      env.dispose()
+    }
+  }
+})
+
+test('delegation.childPreset pins the child preset when the deployment asks for it', async () => {
+  const env = await mount({ role: 'sisyphus', config: { delegation: { childPreset: 'standard' } } })
+  try {
+    const delegate = env.state.tools.find((tool) => tool.name === 'omd_delegate')
+    await delegate.execute(
+      { prompt: 'review this', subagent_type: 'oracle', run_in_background: true },
+      { agent: env.agent, signal: new AbortController().signal },
+    )
+    await waitFor(() => env.state.activations.length > 0)
+    assert.equal(env.state.activations[0].request.agentPreset, 'standard')
+    // The role still travels on the label: pinning the preset does not replace
+    // the role channel, the two are independent.
+    assert.equal(env.state.activations[0].label, 'omd:oracle')
+  } finally {
+    env.dispose()
+  }
+})
+
+test('delegation trims a childPreset that carries padding', async () => {
+  const env = await mount({ role: 'sisyphus', config: { delegation: { childPreset: '  standard  ' } } })
+  try {
+    const delegate = env.state.tools.find((tool) => tool.name === 'omd_delegate')
+    await delegate.execute(
+      { prompt: 'review this', subagent_type: 'oracle', run_in_background: true },
+      { agent: env.agent, signal: new AbortController().signal },
+    )
+    await waitFor(() => env.state.activations.length > 0)
+    assert.equal(env.state.activations[0].request.agentPreset, 'standard')
   } finally {
     env.dispose()
   }

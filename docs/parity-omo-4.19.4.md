@@ -13,23 +13,36 @@ Statuses:
 
 ## Agents
 
-| OmO 4.19.4 | OMD | Status |
+| OmO 4.19.4 | OMD role | Status |
 |---|---|---|
-| sisyphus (primary, orchestrator) | `omd-sisyphus` | ported |
-| hephaestus (primary, deep worker) | `omd-hephaestus` | ported |
-| prometheus (primary, planner) | `omd-prometheus` | ported |
-| atlas (primary, conductor) | `omd-atlas` | ported |
-| oracle (subagent, read-only) | `omd-oracle` | ported |
-| librarian (subagent, read-only) | `omd-librarian` | ported |
-| explore (subagent, read-only) | `omd-explore` | ported |
-| multimodal-looker (subagent, read-only) | `omd-multimodal-looker` | ported |
-| metis (subagent, gap analyst) | `omd-metis` | ported |
-| momus (subagent, reviewer) | `omd-momus` | ported |
-| sisyphus-junior (subagent, executor) | `omd-sisyphus-junior` | ported |
+| sisyphus (primary, orchestrator) | `sisyphus` | ported |
+| hephaestus (primary, deep worker) | `hephaestus` | ported |
+| prometheus (primary, planner) | `prometheus` | ported |
+| atlas (primary, conductor) | `atlas` | ported |
+| oracle (subagent, read-only) | `oracle` | ported |
+| librarian (subagent, read-only) | `librarian` | ported |
+| explore (subagent, read-only) | `explore` | ported |
+| multimodal-looker (subagent, read-only) | `multimodal-looker` | ported |
+| metis (subagent, gap analyst) | `metis` | ported |
+| momus (subagent, reviewer) | `momus` | ported |
+| sisyphus-junior (subagent, executor) | `sisyphus-junior` | ported |
 
-Model chains: **deferred** as literal chains; OMD accepts DSH provider/model
-routes from `.omd/config.jsonc` and inherits the user's session model otherwise.
-OmO's chains name providers that do not exist in DSH.
+The OMD column names a **role**, not a DSH preset. OMD registers no `omd-<role>`
+preset: `dsh.bundle.patch` lists only the runtime row (`omd-runtime`) and the
+browser asset row (`omd-ui`). A role reaches a session as the `omd:<role>` label
+on a delegated child's `subagent/descriptor`, written by `omd_delegate` and
+`omd_look_at` and read back off the child's own session log. Read `omd:sisyphus`
+as a role label, never as a preset id; `agentIdFromPreset` survives only as the
+compatibility fallback that keeps a pre-existing `omd-<role>` session resolving
+the role it was created with. A category delegation appends the category to the
+same label (`omd:<role>@<encoded category>`) so the child can resolve the
+category's model chain.
+
+Model chains: **ported as ordered fallback chains** in the workspace's
+`.omd/config.jsonc` (`agents.*.chain`, `categories.*.chain`, `models.catalog`).
+The routes name DSH providers and models rather than OmO's provider ids; a
+failed model request selects the next route and continues on a new turn, because
+DSH fixes a step's model before dispatch. See `docs/configuration.md`.
 
 ## Workflows
 
@@ -40,7 +53,7 @@ OmO's chains name providers that do not exist in DSH.
 | `hyperplan` keyword | `/omd-hyperplan` five-lane protocol | ported |
 | `hyperplan` + `ulw` combo | `hyperplan-ulw` mode | ported |
 | Prometheus interview → draft → approval → plan | `/omd-plan`, `.omd/drafts`, `.omd/plans` | ported |
-| Metis gap analysis | `omd-metis` delegation | ported |
+| Metis gap analysis | `metis` role delegation | ported |
 | Momus + Oracle dual review | independent review lanes | ported |
 | Atlas `/start-work` + boulder + ledger | `/omd-start-work`, `.omd/boulder`, `.omd/ledger.jsonl` | ported |
 | `/goal` idle continuation | DSH native goal + `/goal` | host-native |
@@ -75,7 +88,7 @@ has no OmO tool counterpart because OmO ships its doctor as a command.
 | `grep` / `glob` | DSH native `grep` / `glob` | host-native |
 | `skill` | DSH native `skill` + `.omd/skills` provider | adapted |
 | `skill_mcp` | deferred: DSH has no skill-embedded MCP lifecycle | deferred |
-| `look_at` | `omd_look_at` with attachments + looker preset | ported |
+| `look_at` | `omd_look_at` with attachments + the `multimodal-looker` role | ported |
 | `task_create/get/list/update` | `omd_task_*` behind `taskSystem.enabled` | ported |
 | `interactive_bash` (tmux) | deferred: DSH has jobs/pwsh, not tmux panes | deferred |
 | hashline `edit` | deferred: DSH edit is read-before-write, not hash-anchored | deferred |
@@ -109,7 +122,7 @@ has no OmO tool counterpart because OmO ships its doctor as a command.
 | sisyphusJuniorNotepad | notepad protocol | adapted |
 | questionLabelTruncator | DSH UI | host-native |
 | taskResumeInfo | `/omd-status` + `task_id` resume | adapted |
-| modelFallback | DSH llm-retry; per-agent chains | deferred |
+| modelFallback | ordered `chain` + `agent.model.select` + continuation turn | ported |
 | noSisyphusGpt | model-specific | n/a |
 | noHephaestusNonGpt | model-specific | n/a |
 | hephaestusAgentsMdInjector | DSH agent-instructions | host-native |
@@ -214,7 +227,8 @@ adding them would claim behavior OMD cannot verify.
 
 ## Explicitly not claimed
 
-- OmO's exact prompt text, model chains, OpenCode/Codex/Senpi adapters.
+- OmO's exact prompt text, literal model/provider ids, OpenCode/Codex/Senpi
+  adapters.
 - Team Mode's 12 `team_*` tools and tmux visualization.
 - Hash-anchored edit, interactive tmux, CodeGraph, Claude Code hooks,
   skill-embedded MCP.

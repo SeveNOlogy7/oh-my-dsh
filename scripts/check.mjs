@@ -3,7 +3,7 @@ import { promises as fs } from 'node:fs'
 import path from 'node:path'
 import { spawnSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
-import { AGENT_IDS, SKILL_NAMES, presetIdFor } from '../src/agents/registry.js'
+import { AGENT_IDS, SKILL_NAMES } from '../src/agents/registry.js'
 import { OMD_VERSION } from '../src/core/constants.js'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
@@ -29,35 +29,17 @@ if (pkg.type !== 'module') note('package must be ESM')
 const patches = pkg.dsh?.bundle?.patch
 const RUNTIME_RELATIVE = './presets/omd-runtime.patch.yml'
 const UI_RELATIVE = './presets/omd-ui.patch.yml'
-if (!Array.isArray(patches) || patches.length !== AGENT_IDS.length + 2) {
-  note(`dsh.bundle.patch must list the ${AGENT_IDS.length} preset patches, the runtime row, and the browser asset row`)
+if (!Array.isArray(patches) || patches.length !== 2) {
+  note(`dsh.bundle.patch must list exactly the runtime row and the browser asset row`)
 } else {
-  // The runtime is one top-level row, so the preset patches are everything that
-  // is neither it nor the browser asset row.
+  // OMD ships no per-role preset patches. DSH's picker lists every registered
+  // preset and `PresetDefinition` has no hidden/selectable field, so eleven
+  // `omd-<role>` presets could not be hidden and only misled users. Roles are
+  // resolved through OMD's own channel instead, and OMD's tools ride the
+  // profile-level runtime row, so nothing here removes a capability.
   const presetPatches = patches.filter((relative) => relative !== RUNTIME_RELATIVE && relative !== UI_RELATIVE)
-  if (presetPatches.length !== AGENT_IDS.length) {
-    note(`expected ${AGENT_IDS.length} preset patches, found ${presetPatches.length}`)
-  }
-  for (const [index, relative] of presetPatches.entries()) {
-    const file = path.join(root, relative)
-    if (!(await exists(file))) {
-      note(`missing patch: ${relative}`)
-      continue
-    }
-    const text = await fs.readFile(file, 'utf8')
-    const id = AGENT_IDS[index]
-    if (!text.includes(`id: preset-${presetIdFor(id)}`)) note(`${relative} does not declare preset-${presetIdFor(id)}`)
-    // The preset id is now the only thing that tells the runtime which role it
-    // serves, so a preset must carry no runtime row of its own: nesting one
-    // would mount the plugin twice and confine it to this preset again.
-    if (text.includes(`name: ${JSON.stringify(pkg.name)}`)) note(`${relative} must not nest the runtime row`)
-    if (/^\s+agent:\s*"?[\w-]+"?\s*$/m.test(text)) note(`${relative} must not pin an agent`)
-    // A row naming a module the installed DSH cannot start leaves the preset
-    // audited as broken, which hides it from the picker entirely. That subpath
-    // was removed from the shipped composition, so it must never come back.
-    if (text.includes('dsh-tool-subagent-control/list-agents')) {
-      note(`${relative} mounts dsh-tool-subagent-control/list-agents, which is not a loadable row`)
-    }
+  if (presetPatches.length !== 0) {
+    note(`dsh.bundle.patch must not list per-role preset patches, found ${presetPatches.length}`)
   }
 
   const runtimePatch = path.join(root, RUNTIME_RELATIVE)
@@ -73,7 +55,7 @@ if (!Array.isArray(patches) || patches.length !== AGENT_IDS.length + 2) {
     if (!text.includes(pluginRow)) note(`${RUNTIME_RELATIVE} does not mount ${pkg.name}`)
     if (text.split(pluginRow).length - 1 !== 1) note(`${RUNTIME_RELATIVE} must mount exactly one runtime row`)
     if (/^\s+agent:\s*"?[\w-]+"?\s*$/m.test(text)) {
-      note(`${RUNTIME_RELATIVE} must not pin an agent; the role is read from the active preset`)
+      note(`${RUNTIME_RELATIVE} must not pin an agent; the role is read from the session's delegation label`)
     }
   }
 
@@ -170,5 +152,5 @@ if (failures.length) {
   process.exit(1)
 }
 console.log(
-  `check ok: ${AGENT_IDS.length} presets + 1 UI asset, ${SKILL_NAMES.length} skills, ${patches.length} patches, syntax + contract + parity + version`,
+  `check ok: ${AGENT_IDS.length} role prompts + ${SKILL_NAMES.length} skills, ${patches.length} patches (runtime + UI asset), syntax + contract + parity + version`,
 )

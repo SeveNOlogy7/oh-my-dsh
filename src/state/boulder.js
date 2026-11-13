@@ -56,7 +56,23 @@ export async function updateBoulder(workspace, stem, patch) {
   return writeBoulderSlot(workspace, stem, { ...base, ...patch })
 }
 
+/**
+ * Settle a slot that exists. Returns `null` and writes nothing when this session
+ * has no slot at all.
+ *
+ * `updateBoulder` manufactures a base slot when the file is missing, which is
+ * right for a caller that means to start or resume a boulder and wrong for a
+ * stop: `/omd-stop-continuation` on a session that never ran `/omd-start-work`
+ * used to leave behind `.omd/boulder/<stem>.json` with `status:"paused"` and
+ * `active_plan:null` (plus a refreshed derived view), so the board then reported
+ * an open paused boulder nobody had created. A missing slot is the normal case
+ * for a stop, not a state to invent. Any other read failure (unreadable or
+ * corrupt file) keeps the previous behavior: the file already exists, so it is
+ * rewritten through `updateBoulder`.
+ */
 export async function clearBoulder(workspace, stem, status = 'done') {
+  const read = await readBoulderSlot(workspace, stem)
+  if (!read.ok && read.reason === 'missing') return null
   return updateBoulder(workspace, stem, { status, finished_at: new Date().toISOString() })
 }
 

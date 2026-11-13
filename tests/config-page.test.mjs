@@ -15,7 +15,7 @@ import {
   createConfigPage,
   parseConfigInput,
 } from '../src/config-page/index.js'
-import { applyPathUpdates, scanJsonc } from '../src/config-page/jsonc-spans.js'
+import { applyPathRemovals, applyPathUpdates, dropNestedPaths, scanJsonc } from '../src/config-page/jsonc-spans.js'
 import { collectProblems, unsupportedKeywordsIn, validate } from '../src/config-page/schema.js'
 import {
   buildLanguageSnippet,
@@ -42,8 +42,6 @@ function page(home) {
   return createConfigPage({ home, packageRoot: root })
 }
 
-const settle = () => new Promise((resolve) => setTimeout(resolve, 0))
-
 // ---------------------------------------------------------------------------
 // Schema validator
 // ---------------------------------------------------------------------------
@@ -52,6 +50,33 @@ test('the shipped schema stays inside the supported keyword subset and accepts t
   assert.deepEqual(unsupportedKeywordsIn(schema), [], 'the validator would silently skip a schema keyword')
   assert.deepEqual(collectProblems(schema, DEFAULT_CONFIG), [])
   assert.deepEqual(validate(schema, DEFAULT_CONFIG), { ok: true })
+})
+
+test('the schema accepts ordered model chains on agents and categories', () => {
+  const valid = {
+    agents: {
+      oracle: {
+        chain: [
+          'strong',
+          { modelRef: 'backup', reasoningEffort: 'high' },
+          { provider: 'p', model: 'm', temperature: 0.2, maxTokens: 8000 },
+          'provider/model',
+        ],
+      },
+    },
+    categories: { deep: { chain: ['strong', 'backup'] } },
+  }
+  assert.deepEqual(validate(schema, valid), { ok: true })
+
+  for (const bad of [
+    { agents: { oracle: { chain: 'strong' } } },
+    { agents: { oracle: { chain: [null] } } },
+    { agents: { oracle: { chain: [7] } } },
+    { categories: { deep: { chain: {} } } },
+    { categories: { deep: { chain: [{ temperature: 3 }] } } },
+  ]) {
+    assert.equal(validate(schema, bad).ok, false, `${JSON.stringify(bad)} must be rejected`)
+  }
 })
 
 test('the validator names the field and the expectation for a bad value', () => {
@@ -118,6 +143,82 @@ test('the splicer refuses a document it cannot patch instead of mangling it', ()
   assert.throws(() => scanJsonc('{ "a": }'), /expected/)
 })
 
+test('a removal deletes the middle member through its own comma and keeps the rest', () => {
+  const source = '{\n  // keep this header\n  "a": 1,\n  "b": 2, // about b\n  "c": 3,\n}\n'
+  const removed = applyPathRemovals(source, [['b']])
+  assert.ok(removed, 'the document must be removable')
+  assert.equal(removed.mode, 'patch')
+  assert.equal(removed.text, '{\n  // keep this header\n  "a": 1,\n  "c": 3,\n}\n')
+  assert.deepEqual(parseJsonc(removed.text), { a: 1, c: 3 })
+})
+
+test('a removal of the last member takes the comma before it, not the previous comment', () => {
+  // No trailing comma after "b", so the separator is the comma of "a".
+  const source = '{\n  "a": 1, // keep a\n  "b": 2\n}\n'
+  const removed = applyPathRemovals(source, [['b']])
+  assert.ok(removed)
+  assert.equal(removed.text, '{\n  "a": 1 // keep a\n}\n', "the previous member's trailing comment survives")
+  assert.deepEqual(parseJsonc(removed.text), { a: 1 })
+
+  // With a trailing comma the member's own line goes, and the comma of "a" stays.
+  const trailing = applyPathRemovals('{\n  "a": 1, // keep a\n  "b": 2,\n}\n', [['b']])
+  assert.ok(trailing)
+  assert.equal(trailing.text, '{\n  "a": 1, // keep a\n}\n')
+  assert.deepEqual(parseJsonc(trailing.text), { a: 1 })
+})
+
+test('a removal that empties a nested object prunes that object too', () => {
+  const source = '{\n  "keywordHook": true,\n  "delegation": {\n    "childPreset": null,\n  },\n}\n'
+  const removed = applyPathRemovals(source, [['delegation', 'childPreset']])
+  assert.ok(removed)
+  assert.equal(removed.text, '{\n  "keywordHook": true,\n}\n', 'the emptied parent key is gone, not left as {}')
+  assert.deepEqual(parseJsonc(removed.text), { keywordHook: true })
+
+  // Pruning climbs: provider is the only key of fast, of catalog, of models.
+  const deep = applyPathRemovals('{ "a": 1, "models": { "catalog": { "fast": { "provider": "p" } } } }', [
+    ['models', 'catalog', 'fast', 'provider'],
+  ])
+  assert.ok(deep)
+  assert.deepEqual(parseJsonc(deep.text), { a: 1 })
+})
+
+test('a removal handles inline objects, CRLF line endings, and every member of the root', () => {
+  const inline = applyPathRemovals('{ "a": 1, "b": 2, "c": 3 }', [['b']])
+  assert.ok(inline)
+  assert.equal(inline.text.includes('"b"'), false)
+  assert.deepEqual(parseJsonc(inline.text), { a: 1, c: 3 })
+
+  const crlf = applyPathRemovals('{\r\n  "a": 1,\r\n  "b": 2,\r\n}\r\n', [['b']])
+  assert.ok(crlf)
+  assert.equal(crlf.text, '{\r\n  "a": 1,\r\n}\r\n')
+
+  // The document root is never pruned: emptying every key leaves `{}`.
+  const swept = applyPathRemovals('{\n  // header\n  "a": 1,\n  "b": 2,\n}\n', [['a'], ['b']])
+  assert.ok(swept)
+  assert.deepEqual(parseJsonc(swept.text), {})
+  assert.match(swept.text, /\/\/ header/, 'a comment above the first member is not the removal of a member')
+})
+
+test('a removal path that is not in the document changes nothing, and a nested path is implied', () => {
+  const untouched = applyPathRemovals('{\n  "a": 1,\n}\n', [['b'], ['a', 'b']])
+  assert.ok(untouched)
+  assert.equal(untouched.text, '{\n  "a": 1,\n}\n')
+  assert.deepEqual(dropNestedPaths([['a', 'b'], ['a'], ['a'], ['b']]), [['a'], ['b']])
+
+  const nested = applyPathRemovals('{\n  "a": 1,\n  "delegation": {\n    "maxConcurrent": 5,\n  },\n}\n', [
+    ['delegation', 'maxConcurrent'],
+    ['delegation'],
+  ])
+  assert.ok(nested)
+  assert.deepEqual(parseJsonc(nested.text), { a: 1 })
+})
+
+test('the splicer returns null where it cannot compute the span confidently', () => {
+  assert.equal(applyPathRemovals('{ "a": ', [['a']]), null)
+  assert.equal(applyPathRemovals('[1, 2]', [['a']]), null)
+  assert.equal(applyPathRemovals('{ "a": 1, "a": 2 }', [['a']]), null, 'a duplicate key names two members')
+})
+
 // ---------------------------------------------------------------------------
 // Read
 // ---------------------------------------------------------------------------
@@ -180,7 +281,7 @@ test('write round-trips a valid change and preserves comments and trailing comma
   })
 
   assert.equal(result.ok, true)
-  assert.deepEqual(result.write, { mode: 'patch', keys: ['keywordHook', 'delegation.maxConcurrent'] })
+  assert.deepEqual(result.write, { mode: 'patch', keys: ['keywordHook', 'delegation.maxConcurrent'], unset: [] })
   assert.equal(result.config.keywordHook, false)
   assert.equal(result.config.delegation.maxConcurrent, 3)
   assert.equal(result.config.delegation.waitTimeoutMs, 600000)
@@ -190,6 +291,29 @@ test('write round-trips a valid change and preserves comments and trailing comma
   assert.match(text, /"maxConcurrent": 3/)
   assert.match(text, /"waitTimeoutMs": 600000,/)
   assert.deepEqual(parseJsonc(text), { keywordHook: false, delegation: { maxConcurrent: 3, waitTimeoutMs: 600000 } })
+})
+
+test('a model chain round-trips through the write path', async () => {
+  const home = await tempDir()
+  const workspace = await tempDir({ '.omd/config.jsonc': '{\n  "keywordHook": true\n}\n' })
+  const pageService = page(home)
+  const chain = ['strong', { provider: 'inline-provider', model: 'inline-model', reasoningEffort: 'high' }]
+  const written = await pageService.set({
+    workspace,
+    agentId: 'sisyphus',
+    language: 'en',
+    patch: {
+      agents: { oracle: { chain } },
+      categories: { deep: { chain: ['inline-provider/inline-model'] } },
+      models: { catalog: { strong: { provider: 'deepseek-account', model: 'deepseek-v4' } } },
+    },
+  })
+  assert.equal(written.ok, true)
+  const read = await pageService.read({ workspace, agentId: 'sisyphus', language: 'en' })
+  assert.deepEqual(read.fileConfig.agents.oracle.chain, chain)
+  assert.deepEqual(read.config.agents.oracle.chain, chain)
+  assert.deepEqual(read.fileConfig.categories.deep.chain, ['inline-provider/inline-model'])
+  assert.deepEqual(read.fileConfig.models.catalog.strong, { provider: 'deepseek-account', model: 'deepseek-v4' })
 })
 
 test('write creates a missing file without a BOM and strips one that is present', async () => {
@@ -264,6 +388,152 @@ test('write reports a pre-existing schema problem instead of blocking on it', as
   assert.match(result.schemaProblems[0].message, /skills\.paths must be array/)
 })
 
+test('write removes a key path, prunes the object it emptied, and keeps every other comment', async () => {
+  const home = await tempDir()
+  const workspace = await tempDir({
+    '.omd/config.jsonc':
+      '{\n  // Oh-My-DSH project configuration.\n  "keywordHook": true,\n  "delegation": {\n    "maxConcurrent": 5,\n    "childPreset": null,\n  },\n}\n',
+  })
+  const result = await page(home).set({
+    workspace,
+    agentId: 'sisyphus',
+    language: 'en',
+    patch: {},
+    unset: [['delegation', 'childPreset']],
+  })
+
+  assert.equal(result.ok, true)
+  assert.deepEqual(result.write, { mode: 'patch', keys: [], unset: ['delegation.childPreset'] })
+  assert.deepEqual(result.fileConfig, { keywordHook: true, delegation: { maxConcurrent: 5 } }, 'the file no longer sets the key')
+  assert.equal(result.config.delegation.childPreset, null, 'so the shipped default applies again')
+  const text = await fs.readFile(result.file, 'utf8')
+  assert.match(text, /\/\/ Oh-My-DSH project configuration\./, 'an unrelated comment survives')
+  assert.equal(text.includes('childPreset'), false)
+  assert.deepEqual(parseJsonc(text), { keywordHook: true, delegation: { maxConcurrent: 5 } })
+})
+
+test('a removal the file does not perform changes nothing, and still lets the patch through', async () => {
+  const home = await tempDir()
+  const workspace = await tempDir({ '.omd/config.jsonc': '{\n  "keywordHook": true,\n}\n' })
+  const pageService = page(home)
+  const before = await fs.readFile(path.join(workspace, '.omd', 'config.jsonc'), 'utf8')
+
+  // Delegation is inherited from another layer, so there is nothing here to
+  // remove: the removal is a no-op and the file stays byte-identical.
+  const alone = await pageService.set({ workspace, agentId: 'sisyphus', language: 'en', patch: {}, unset: [['delegation', 'maxDepth']] })
+  assert.equal(alone.ok, false)
+  assert.equal(alone.error.kind, 'usage')
+  assert.match(alone.error.message, /nothing to write/)
+  assert.equal(await fs.readFile(path.join(workspace, '.omd', 'config.jsonc'), 'utf8'), before)
+
+  const withPatch = await pageService.set({
+    workspace,
+    agentId: 'sisyphus',
+    language: 'en',
+    patch: { keywordHook: false },
+    unset: [['delegation', 'maxDepth']],
+  })
+  assert.equal(withPatch.ok, true)
+  assert.deepEqual(withPatch.write, { mode: 'patch', keys: ['keywordHook'], unset: [] })
+  assert.equal(withPatch.config.keywordHook, false)
+})
+
+test('patch and unset travel in one request, and the patch wins where they overlap', async () => {
+  const home = await tempDir()
+  const workspace = await tempDir({
+    '.omd/config.jsonc':
+      '{\n  "delegation": {\n    "maxConcurrent": 5,\n    "maxDepth": 1,\n  },\n  "taskSystem": { "enabled": false },\n}\n',
+  })
+  const pageService = page(home)
+
+  const disjoint = await pageService.set({
+    workspace,
+    agentId: 'sisyphus',
+    language: 'en',
+    patch: { delegation: { maxConcurrent: 2 } },
+    unset: [['delegation', 'maxDepth']],
+  })
+  assert.equal(disjoint.ok, true)
+  assert.deepEqual(disjoint.write, { mode: 'patch', keys: ['delegation.maxConcurrent'], unset: ['delegation.maxDepth'] })
+  assert.deepEqual(disjoint.fileConfig, { delegation: { maxConcurrent: 2 }, taskSystem: { enabled: false } })
+
+  // The same path in both halves: the removal runs first and the patch decides.
+  const overlapping = await pageService.set({
+    workspace,
+    agentId: 'sisyphus',
+    language: 'en',
+    patch: { delegation: { maxConcurrent: 4 } },
+    unset: [['delegation']],
+  })
+  assert.equal(overlapping.ok, true)
+  assert.deepEqual(overlapping.write, { mode: 'patch', keys: ['delegation.maxConcurrent'], unset: ['delegation'] })
+  assert.deepEqual(overlapping.fileConfig, { delegation: { maxConcurrent: 4 }, taskSystem: { enabled: false } })
+  assert.equal(overlapping.config.delegation.maxDepth, 1, 'the removed key falls back to the default')
+})
+
+test('a removal the schema rejects leaves the file byte-identical', async () => {
+  const home = await tempDir()
+  const workspace = await tempDir({
+    '.omd/config.jsonc': '{ "models": { "catalog": { "fast": { "provider": "p", "model": "m" } } } }\n',
+  })
+  const pageService = page(home)
+  const read = await pageService.read({ workspace, agentId: 'sisyphus', language: 'en' })
+  const before = await fs.readFile(read.file, 'utf8')
+
+  const rejected = await pageService.set({
+    workspace,
+    agentId: 'sisyphus',
+    language: 'en',
+    patch: {},
+    unset: [['models', 'catalog', 'fast', 'model']],
+  })
+  assert.equal(rejected.ok, false)
+  assert.equal(rejected.error.kind, 'validation')
+  assert.equal(rejected.error.message, 'models.catalog.fast.model is required', "the validator's own message")
+  assert.deepEqual(rejected.error.path, ['models', 'catalog', 'fast', 'model'])
+  assert.equal(await fs.readFile(read.file, 'utf8'), before, 'a rejected removal must not touch the file')
+})
+
+test('a removal the splicer cannot place falls back to a rewrite that still removes it', async () => {
+  const home = await tempDir()
+  // A duplicate key names two members, so which span to delete is undecidable:
+  // the write has to fall back to rewriting the document, and that rewrite must
+  // reflect the removal (the alternative is a file that disagrees with the
+  // validated document the page just showed).
+  const workspace = await tempDir({
+    '.omd/config.jsonc': '{ "keywordHook": true, "delegation": { "maxDepth": 1, "maxDepth": 2 } }\n',
+  })
+  const result = await page(home).set({
+    workspace,
+    agentId: 'sisyphus',
+    language: 'en',
+    patch: {},
+    unset: [['delegation', 'maxDepth']],
+  })
+  assert.equal(result.ok, true)
+  assert.deepEqual(result.write, { mode: 'rewrite', keys: [], unset: ['delegation.maxDepth'] })
+  assert.deepEqual(parseJsonc(await fs.readFile(result.file, 'utf8')), { keywordHook: true })
+})
+
+test('the envelope carries the shipped defaults and every layer with the keys it sets', async () => {
+  const home = await tempDir({ '.omd/config.jsonc': '{\n  "keywordHook": false,\n  "agents": { "sisyphus": { "model": "m" } },\n}\n' })
+  const workspace = await tempDir({ '.omd/config.jsonc': '{\n  "delegation": { "maxConcurrent": 2 },\n}\n' })
+  const pageService = page(home)
+
+  const read = await pageService.read({ workspace, agentId: 'sisyphus', language: 'en' })
+  assert.deepEqual(read.defaults, DEFAULT_CONFIG, 'the page shows what an unset key would inherit')
+  assert.deepEqual(read.layers, [
+    { file: path.join(home, '.omd', 'config.jsonc'), keys: ['agents', 'keywordHook'] },
+    { file: read.file, keys: ['delegation'] },
+  ])
+  assert.deepEqual(read.layers.map((layer) => layer.file), read.sources, 'layers follow the source order')
+
+  const written = await pageService.set({ workspace, agentId: 'sisyphus', language: 'en', patch: { keywordHook: true } })
+  assert.equal(written.ok, true)
+  assert.deepEqual(written.defaults, DEFAULT_CONFIG)
+  assert.deepEqual(written.layers.map((layer) => layer.keys), [['agents', 'keywordHook'], ['delegation', 'keywordHook']])
+})
+
 // ---------------------------------------------------------------------------
 // Command input grammar and the plugin section
 // ---------------------------------------------------------------------------
@@ -271,11 +541,59 @@ test('write reports a pre-existing schema problem instead of blocking on it', as
 test('parseConfigInput separates the read, set, and usage forms', () => {
   assert.deepEqual(parseConfigInput(''), { kind: 'read' })
   assert.deepEqual(parseConfigInput('   '), { kind: 'read' })
-  assert.deepEqual(parseConfigInput(' set {"keywordHook":false} '), { kind: 'set', patch: { keywordHook: false } })
+  assert.deepEqual(parseConfigInput(' set {"keywordHook":false} '), { kind: 'set', patch: { keywordHook: false }, unset: [] })
   assert.equal(parseConfigInput('set').kind, 'usage')
   assert.equal(parseConfigInput('set [1]').kind, 'usage')
   assert.match(parseConfigInput('set {').message, /not valid JSON/)
   assert.match(parseConfigInput('bogus').message, /usage: \/omd-config/)
+})
+
+test('parseConfigInput reads the structured patch+unset form for both of its optional keys', () => {
+  assert.deepEqual(parseConfigInput('set {"patch":{"keywordHook":false},"unset":[["delegation","maxDepth"]]}'), {
+    kind: 'set',
+    patch: { keywordHook: false },
+    unset: [['delegation', 'maxDepth']],
+  })
+  // Either key may stand alone: the page sends `{patch:{},unset:[…]}` when only
+  // removals are staged, and a hand-typed request may name only a patch.
+  assert.deepEqual(parseConfigInput('set {"unset":[["delegation","maxDepth"]]}'), {
+    kind: 'set',
+    patch: {},
+    unset: [['delegation', 'maxDepth']],
+  })
+  assert.deepEqual(parseConfigInput('set {"patch":{"keywordHook":false}}'), {
+    kind: 'set',
+    patch: { keywordHook: false },
+    unset: [],
+  })
+  // Nothing to do is the grammar's business, not the parser's: both are empty,
+  // so the write path answers its "nothing to write" usage error.
+  assert.deepEqual(parseConfigInput('set {"patch":{},"unset":[]}'), { kind: 'set', patch: {}, unset: [] })
+  // A real key next to the structured ones makes it a patch object, which the
+  // write path then refuses as an unknown top-level key.
+  assert.deepEqual(parseConfigInput('set {"keywordHook":true,"patch":{}}'), {
+    kind: 'set',
+    patch: { keywordHook: true, patch: {} },
+    unset: [],
+  })
+})
+
+test('parseConfigInput refuses a malformed unset path with the usage line for both forms', () => {
+  const cases = [
+    ['set {"unset":"delegation.maxDepth"}', /unset must be an array of key paths/],
+    ['set {"unset":[["delegation",7]]}', /every unset path segment must be a non-empty string/],
+    ['set {"unset":[[""]]}', /every unset path segment must be a non-empty string/],
+    ['set {"unset":[[]]}', /an unset path must name at least one key/],
+    ['set {"unset":[["a"],"b"]}', /each unset path must be an array of key names/],
+    ['set {"unset":null}', /unset must be an array of key paths/],
+    ['set {"patch":5}', /"patch" must be a JSON object/],
+  ]
+  for (const [input, expected] of cases) {
+    const parsed = parseConfigInput(input)
+    assert.equal(parsed.kind, 'usage', `${input} must be refused`)
+    assert.match(parsed.message, expected)
+    assert.match(parsed.message, /usage: \/omd-config \[set <json object> \| set \{"patch"/, 'both write forms are documented')
+  }
 })
 
 test('the plugin section reports the row language and generates the exact profile override', async () => {
@@ -329,10 +647,10 @@ test('the /omd-config command serves the page: read, write, and a rejected value
   const workspace = await tempDir({
     '.omd/config.jsonc': '{\n  // keep this comment\n  "keywordHook": true,\n}\n',
   })
-  const { ctx } = createFakeContext({ cwd: workspace, agentPreset: 'omd-sisyphus' })
+  const { ctx } = createFakeContext({ cwd: workspace })
   const runtime = { ctx, agentId: 'sisyphus', language: 'en', stateFor: async () => ({ cwd: workspace }) }
   const definition = createCommands(runtime).find((command) => command.name === 'omd-config')
-  assert.ok(definition, 'the preset still registers omd-config')
+  assert.ok(definition, 'the runtime row still registers omd-config')
   assert.equal(definition.input.hint, 'set <json>')
 
   const agent = { id: 'session-1' }
@@ -368,6 +686,20 @@ test('the /omd-config command serves the page: read, write, and a rejected value
   assert.equal(rejected.kind, 'error')
   assert.equal(rejected.text, 'delegation.maxDepth must be integer >= 0 (got -1)')
 
+  // The structured form reaches the store through the human command too: the
+  // handler forwards both halves, so a typed request can remove keys as well.
+  const removed = await definition.handler({
+    agent,
+    rawInput: 'set {"patch":{"taskSystem":{"enabled":true}},"unset":[["keywordHook"]]}',
+    signal,
+  })
+  assert.equal(removed.kind, 'success')
+  const removedEnvelope = JSON.parse(removed.text)
+  assert.deepEqual(removedEnvelope.write, { mode: 'patch', keys: ['taskSystem.enabled'], unset: ['keywordHook'] })
+  assert.equal(removedEnvelope.config.keywordHook, true, 'the inherited value applies again')
+  assert.equal(Object.hasOwn(removedEnvelope.fileConfig, 'keywordHook'), false)
+  assert.match(await fs.readFile(removedEnvelope.file, 'utf8'), /\/\/ keep this comment/)
+
   const usage = await definition.handler({ agent, rawInput: 'bogus', signal })
   assert.equal(usage.kind, 'error')
   assert.match(usage.text, /usage: \/omd-config/)
@@ -378,269 +710,4 @@ test('the /omd-config command serves the page: read, write, and a rejected value
     createCommands(runtime).filter((command) => command.name === 'omd-config').map((command) => Object.keys(command).sort()),
     [['description', 'handler', 'input', 'name']],
   )
-})
-
-// ---------------------------------------------------------------------------
-// Client half: structure and render smoke tests (no browser available)
-// ---------------------------------------------------------------------------
-
-/** Minimal React runtime: enough to render a hook-using function component. */
-function createReactStub() {
-  const states = []
-  const refs = []
-  let effects = []
-  let cursor = 0
-  const lib = {
-    createElement(type, props, ...children) {
-      return { type, props: props || {}, children: children.flat() }
-    },
-    useState(initial) {
-      const index = cursor
-      cursor += 1
-      if (!(index in states)) states[index] = typeof initial === 'function' ? initial() : initial
-      return [
-        states[index],
-        (next) => {
-          states[index] = typeof next === 'function' ? next(states[index]) : next
-        },
-      ]
-    },
-    useRef(initial) {
-      const index = cursor
-      cursor += 1
-      if (!(index in refs)) refs[index] = { current: initial }
-      return refs[index]
-    },
-    useEffect(fn) {
-      cursor += 1
-      effects.push(fn)
-    },
-  }
-  return {
-    lib,
-    render(component, props) {
-      cursor = 0
-      effects = []
-      const tree = component(props)
-      const pending = effects
-      effects = []
-      for (const effect of pending) effect()
-      return tree
-    },
-  }
-}
-
-function flatten(node, out = []) {
-  if (node === null || node === undefined || node === false) return out
-  if (typeof node === 'string' || typeof node === 'number') {
-    out.push(String(node))
-    return out
-  }
-  if (Array.isArray(node)) {
-    for (const child of node) flatten(child, out)
-    return out
-  }
-  if (node.children) flatten(node.children, out)
-  return out
-}
-
-function find(node, predicate) {
-  if (node === null || node === undefined || typeof node !== 'object') return null
-  if (Array.isArray(node)) {
-    for (const child of node) {
-      const hit = find(child, predicate)
-      if (hit !== null) return hit
-    }
-    return null
-  }
-  if (node.props && predicate(node)) return node
-  return node.children ? find(node.children, predicate) : null
-}
-
-/** Load ui/client.js the way the browser module table does. */
-function loadClientModule() {
-  const registrations = []
-  const previousWindow = globalThis.window
-  globalThis.window = { __ModuleLoader__: { load: (registration) => registrations.push(registration) } }
-  try {
-    // client.js is a classic script (no imports or exports): running its body is
-    // exactly what the browser does, and it only registers one factory.
-    const source = readFileSync(path.join(root, 'ui', 'client.js'), 'utf8')
-    new Function(source)()
-  } finally {
-    if (previousWindow === undefined) delete globalThis.window
-    else globalThis.window = previousWindow
-  }
-  assert.equal(registrations.length, 1, 'client.js must register exactly one module')
-  return registrations[0]
-}
-
-test('the client half registers its command cells and the settings section', async () => {
-  const source = await fs.readFile(path.join(root, 'ui', 'client.js'), 'utf8')
-  assert.equal((source.match(/window\.__ModuleLoader__\.load\(/g) ?? []).length, 1)
-  assert.ok(!/<[A-Za-z][^>]*>/.test(source), 'client.js must not contain JSX or HTML markup')
-  assert.match(source, /id: 'omd-ui'/)
-
-  const registration = loadClientModule()
-  assert.equal(registration.id, 'omd-ui')
-
-  const react = createReactStub()
-  const clientModule = registration.factory((specifier) => {
-    if (specifier === 'react') return react.lib
-    throw new Error(`unexpected require("${specifier}")`)
-  })
-  // The Client context refuses a property access it was not injected with, so
-  // the list names every service the half reaches: `remote.commands` is a
-  // separate declaration from `remote` and omitting it broke the live page.
-  assert.deepEqual(clientModule.inject, ['slots', 'locale', 'sessions', 'remote', 'remote.commands'])
-
-  const injectionKeys = []
-  const registered = []
-  const dictionaries = {}
-  const ctx = {
-    slots: {
-      inject(key, callback) {
-        injectionKeys.push(key)
-        callback()
-        return () => {}
-      },
-      register(options, Component) {
-        const handle = { options, Component }
-        registered.push(handle)
-        return () => {}
-      },
-    },
-    get(name) {
-      if (name !== 'locale') return undefined
-      return {
-        register(ns, dictionary) {
-          dictionaries[ns] = dictionary
-          return () => {}
-        },
-        bind(ns) {
-          return (key) => {
-            const dictionary = dictionaries[ns]
-            return dictionary && dictionary.en[key] !== undefined ? dictionary.en[key] : key
-          }
-        },
-      }
-    },
-    effect(fn) {
-      return fn()
-    },
-  }
-  clientModule.apply(ctx)
-
-  assert.deepEqual(injectionKeys, ['conversation.chat.commandview', 'settings.section'])
-  const cells = registered.filter((handle) => handle.options.name === 'conversation.chat.commandview')
-  assert.ok(cells.length >= 10, 'every OMD command keeps its cell')
-  assert.ok(cells.some((handle) => handle.options.key === 'omd-config'))
-
-  const section = registered.find((handle) => handle.options && handle.options.name === 'settings.section')
-  assert.ok(section, 'the settings section is registered')
-  assert.equal(section.options.id, 'omd-config')
-  assert.equal(section.options.locale, 'omd-config-page')
-  assert.equal(section.options.label(), 'OMD')
-  const injected = section.options.inject()
-  assert.equal(typeof injected.controller.run, 'function')
-  assert.equal(typeof injected.fallbackT, 'function')
-  assert.equal(injected.fallbackT('title'), 'OMD configuration')
-
-  const dictionary = dictionaries['omd-config-page']
-  assert.ok(dictionary, 'the page registers its own locale dictionaries')
-  assert.deepEqual(Object.keys(dictionary.en).sort(), Object.keys(dictionary.zh).sort())
-  assert.ok(Object.keys(dictionary.en).length > 20)
-
-  // Render the loaded page with a stubbed transport, then change one field and
-  // save: this exercises the page's own patch building without a browser.
-  const envelope = {
-    protocol: CONFIG_PAGE_PROTOCOL,
-    ok: true,
-    workspace: 'C:\\ws',
-    file: 'C:\\ws\\.omd\\config.jsonc',
-    exists: true,
-    bom: false,
-    parse: { ok: true },
-    sources: ['C:\\ws\\.omd\\config.jsonc'],
-    diagnostics: [],
-    config: {
-      keywordHook: true,
-      delegation: { maxConcurrent: 5, maxDepth: 1, defaultBackground: false, waitTimeoutMs: 600000 },
-      taskSystem: { enabled: false },
-      diagnostics: { commands: [] },
-      agents: {},
-      categories: {},
-      models: { catalog: {} },
-    },
-    plugin: {
-      compositionTime: true,
-      language: { value: 'en', supported: ['en', 'zh'], source: 'plugin row Config', recognized: true },
-      tiers: [{ name: 'quick', description: '', modelRef: null, provider: 'p', model: 'm', source: 'builtin' }],
-      snippet: '- id: preset-omd-sisyphus\n  name: "@deepseek-ai/dsh-agent-preset"\n  config:\n    id: omd-sisyphus\n',
-    },
-  }
-  const calls = []
-  const controller = {
-    async run(line) {
-      calls.push(line)
-      return { envelope }
-    },
-  }
-  const props = { controller }
-  let tree = react.render(section.Component, props)
-  await settle()
-  tree = react.render(section.Component, props)
-
-  const text = flatten(tree).join('\n')
-  assert.ok(text.includes('OMD configuration'), 'the section renders its localized title')
-  assert.ok(text.includes('C:\\ws\\.omd\\config.jsonc'), 'the section shows the workspace file')
-  assert.ok(text.includes('Save changes'), 'the save action is rendered')
-  assert.deepEqual(calls, ['/omd-config'])
-
-  const checkbox = find(tree, (node) => node.type === 'input' && node.props.type === 'checkbox')
-  assert.ok(checkbox, 'the keyword-hook toggle is rendered')
-  checkbox.props.onChange({ target: { checked: false } })
-  tree = react.render(section.Component, props)
-  const save = find(tree, (node) => typeof node.props.onClick === 'function' && Array.isArray(node.children) && node.children.includes('Save changes'))
-  assert.ok(save && typeof save.props.onClick === 'function', 'the save button is clickable')
-  save.props.onClick()
-  await settle()
-  assert.deepEqual(calls, ['/omd-config', '/omd-config set {"keywordHook":false}'])
-})
-
-test('the page says so when it has no OMD session instead of failing silently', async () => {
-  const registration = loadClientModule()
-  const react = createReactStub()
-  const clientModule = registration.factory(() => react.lib)
-  const section = { Component: null }
-  const ctx = {
-    slots: {
-      inject(key, callback) {
-        const handles = callback()
-        if (Array.isArray(handles)) return () => {}
-        return () => {}
-      },
-      register(options, Component) {
-        if (options.name === 'settings.section') section.Component = Component
-        return () => {}
-      },
-    },
-    get() {
-      return undefined
-    },
-    effect(fn) {
-      return fn()
-    },
-  }
-  clientModule.apply(ctx)
-  assert.ok(section.Component, 'the section registers without a locale or session service')
-
-  const controller = { async run() { return { error: { kind: 'no-session', message: null } } } }
-  const props = { controller }
-  react.render(section.Component, props)
-  await settle()
-  const tree = react.render(section.Component, props)
-  const text = flatten(tree).join('\n')
-  assert.ok(text.includes('No OMD session is open'))
-  assert.ok(text.includes('Retry'))
 })
