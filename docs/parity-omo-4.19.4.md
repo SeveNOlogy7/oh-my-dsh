@@ -7,6 +7,7 @@ Statuses:
 
 - **ported** — behavior implemented in OMD.
 - **adapted** — behavior preserved through a different DSH mechanism.
+- **partial** — subset implemented (options, flags, or operations missing).
 - **host-native** — DSH already provides it; OMD does not duplicate it.
 - **deferred** — not in v0.1.0, with a concrete reason.
 - **n/a** — the concept does not apply to DSH.
@@ -62,7 +63,7 @@ DSH fixes a step's model before dispatch. See `docs/configuration.md`.
 | `/stop-continuation` | `/omd-stop-continuation` | ported |
 | `/handoff` | `/omd-handoff` | ported |
 | `/remove-ai-slops` | `/omd-remove-ai-slops` | ported |
-| `/refactor` | `/omd-refactor` | ported |
+| `/refactor` | `/omd-refactor` | ported (flags not implemented) |
 | `ralph loop` | removed in 4.19.4; OMD does not implement it | n/a |
 | `mass ulw` | 5.x tagline; not part of 4.19.4 | n/a |
 
@@ -94,11 +95,26 @@ has no OmO tool counterpart because OmO ships its doctor as a command.
 | hashline `edit` | deferred: DSH edit is read-before-write, not hash-anchored | deferred |
 | `team_*` (12 tools) | deferred: `/omd-team` wave protocol instead | adapted/deferred |
 | `monitor` | deferred: DSH jobs/background output | deferred |
-| LSP MCP (diagnostics, definitions, refs, rename, symbols) | `omd_lsp` (4 ops) + `omd_diagnostics` (configured commands) | adapted |
+| LSP MCP (diagnostics, definitions, refs, rename, symbols) | `omd_lsp` (4 ops) + `omd_diagnostics` (configured commands) | adapted (4-operation closed union; host-bound) |
 | AST-grep tool | `omd-ast-grep` skill driving `sg` | adapted |
 | built-in MCPs: websearch/context7/grep_app | DSH `web_search`/`web_fetch`; context7/grep_app | partial/deferred |
 
+The LSP row is host-bound by contract, not by choice. `LspOperation` is the
+closed union `goToDefinition`, `findReferences`, `goToImplementation`, `hover` —
+there is no `rename`, `prepareRename`, `symbols`, or diagnostics operation — and
+`ctx.lsp` exposes only `registerProvider` and `query` (`[host]`). OMD's enum is
+that same four (`[repo]` `src/tools/misc.js:144`), so `omd_diagnostics` runs
+configured commands instead of an LSP diagnostics operation.
+
 ## Hooks (54 base)
+
+The subsection headers below are **OMD's** grouping: 24/17/4/7/2 = 54. Upstream
+publishes 24/16/5/7/2 = 54 (`docs/reference/features.md:838-846` at v4.19.4,
+commit b072d27) — the same total with one hook in a different tier. The one-tier
+difference is upstream's documented `thinking-block-validator` (Transform,
+`features.md:888`), which is **absent from the v4.19.4 tree**: none of the tag's
+7349 paths contains that name. The matrix therefore does not map it; the
+discrepancy is upstream documentation drift, not an OMD coverage gap.
 
 ### Session (24)
 
@@ -190,15 +206,27 @@ handlers are **deferred** with Team Mode's tool family. v0.1.0 uses the
 | OmO 4.19.4 | OMD | Status |
 |---|---|---|
 | `/goal` | DSH native `/goal` | host-native |
-| `/refactor` | `/omd-refactor` | ported |
-| `/start-work` | `/omd-start-work` | ported |
+| `/refactor` | `/omd-refactor` | ported (flags not implemented) |
+| `/start-work` | `/omd-start-work` | ported (flags not implemented) |
 | `/stop-continuation` | `/omd-stop-continuation` | ported |
 | `/handoff` | `/omd-handoff` | ported |
 | `/remove-ai-slops` | `/omd-remove-ai-slops` | ported |
 | `/hyperplan` | `/omd-hyperplan` | ported |
-| `/init-deep` (skill/command) | `/omd-init-deep` + skill | ported |
+| `/init-deep` (skill/command) | `/omd-init-deep` + skill | ported (flags not implemented) |
 | — | `/omd-init`, `/omd-status`, `/omd-config`, `/omd-ulw`, `/omd-plan`, `/omd-team` | OMD additions |
 | — | `omd-doctor` skill → `omd_doctor` tool | OMD addition; the doctor is a skill, not a command |
+
+One sentence per flagged row, against `docs/reference/features.md` at v4.19.4
+(commit b072d27):
+
+- `/init-deep [--create-new] [--max-depth=N]` (`:344`): `/omd-init-deep` takes no
+  input, so neither flag is implemented.
+- `/refactor <target> [--scope=<file|module|project>] [--strategy=<safe|aggressive>]`
+  (`:415`): `/omd-refactor` takes `<target>` only, so both options are missing.
+- `/start-work [plan-name] [--worktree <path>] [--make-pr] [--ship]` (`:433`):
+  `/omd-start-work` takes `[plan]` only, so all three flags are missing;
+  `--worktree` reduces to a prompt instruction, while `--make-pr` and `--ship`
+  are host-bound (they need forge and CI integration DSH does not expose).
 
 ## Skills
 
@@ -209,11 +237,26 @@ OMD ships 15 clean-room skills:
 `omd-frontend`, `omd-ast-grep`, `omd-remove-ai-slops`, `omd-hyperplan`,
 `omd-team-mode`, `omd-debugging`, `omd-visual-qa`.
 
+Upstream ships **17** shared skills (`packages/shared-skills/skills/`) plus TS
+built-in skills (`packages/omo-opencode/src/features/builtin-skills/skills/`:
+`playwright`, `playwright-cli`, `playwright-mcp`, `agent-browser`, `dev-browser`,
+`security-research`, `security-review`, `team-mode`, …). OMD's 15 above are 11
+of the shared set — `ast-grep`, `debugging`, `frontend`, `git-master`,
+`init-deep`, `refactor`, `remove-ai-slops`, `review-work`, `ulw-plan`,
+`ulw-research`, `visual-qa` — plus 4 OMD additions: `omd-doctor`,
+`omd-hyperplan`, `omd-team-mode`, `omd-ulw-execute`. Five shared skills have no
+OMD counterpart: `programming`, `lsp-setup`, `coding-agent-sessions`,
+`data-scientist`, `ultimate-browsing`. `start-work` is not missing: OMD
+implements it as the `/omd-start-work` command rather than a skill.
+
 Deferred domain skills from OmO's catalog: `playwright`, `playwright-cli`,
 `dev-browser`, `security-research`, `data-scientist`, `programming`,
-`lsp-setup`, `ultimate-browsing`, `coding-agent-sessions`. Reason: they depend
-on host browser/MCP/data tooling that is not part of the DSH base composition;
-adding them would claim behavior OMD cannot verify.
+`lsp-setup`, `ultimate-browsing`, `coding-agent-sessions`. That list is correct.
+Reason: they depend on host browser/MCP/data tooling that is not part of the DSH
+base composition; adding them would claim behavior OMD cannot verify. The
+browser and security built-ins (`playwright`, `playwright-cli`, `playwright-mcp`,
+`agent-browser`, `dev-browser`, `security-research`, `security-review`) are
+host-bound for the same reason and stay deferred.
 
 ## Configuration and state
 
@@ -233,3 +276,58 @@ adding them would claim behavior OMD cannot verify.
 - Hash-anchored edit, interactive tmux, CodeGraph, Claude Code hooks,
   skill-embedded MCP.
 - `mass ulw` (5.x) and the removed ralph loop.
+
+## Not aligned with omo 4.19.4
+
+Statuses reuse the legend above; evidence labels are `[repo]` `path:line` in this
+repository, `[upstream]` `path @ v4.19.4 (commit b072d27)`, and `[host]` for a
+recorded Host contract (cordis_inspect).
+
+| ID | Gap | Status | Evidence | Disposition |
+|---|---|---|---|---|
+| G1 | Per-model fallback objects (`thinking.budgetTokens`, `variant`, `top_p`, `textVerbosity`, `max_prompt_tokens`) | partial | `[repo]` `src/core/config.js:281` `routeFields` keeps provider/model/reasoningEffort/temperature/maxTokens only | close in 0.2 |
+| G2 | File-based prompts (`prompt` / `prompt_append` via `file://`, `~`) | deferred | `[repo]` `src/runtime/runtime.js:72` reads only an inline `promptAppend` string; the schema has no `prompt` property | keep deferred |
+| G3 | Per-agent tool allow/deny config | partial | `[repo]` `src/agents/policies.js:8` hard-codes the per-role policy and `schema/omd-config.schema.json:52` has no tool map; `[host]` `ctx.tools.restrict` can only subtract | close in 0.2 |
+| G4 | `is_unstable_agent`, `disable`, `max_prompt_tokens` | deferred | `[repo]` `src/core/defaults.js:54` `NEUTRAL_AGENT_SETTINGS` carries none of the three | keep deferred |
+| G5 | `/init-deep` flags | partial | `[repo]` `src/commands/index.js:355` registers no input; `[upstream]` `docs/reference/features.md:344 @ v4.19.4 (commit b072d27)` | close in 0.2 |
+| G6 | `/refactor` flags | partial | `[repo]` `src/commands/index.js:366` takes `<target>` only; `[upstream]` `docs/reference/features.md:415 @ v4.19.4 (commit b072d27)` | close in 0.2 |
+| G7 | `/start-work` flags | partial | `[repo]` `src/commands/index.js:193` takes `[plan]` only; `[upstream]` `docs/reference/features.md:433 @ v4.19.4 (commit b072d27)` | keep deferred |
+| G8 | Custom command loading (`.opencode/command`, `.claude/commands`) | deferred | `[repo]` `src/commands/names.js:19` is a fixed list; `[host]` `ctx.commands` is the Host registry, so dispatch may be host-owned | keep deferred |
+| G9 | `search` / `analyze` keyword activation | partial | `[repo]` `src/hooks/keyword.js:15` `DIRECTIVE` lists hyperplan-ulw/ultrawork/ulw/team/hyperplan only; `[upstream]` `docs/reference/features.md:875 @ v4.19.4 (commit b072d27)` | close in 0.2 |
+| G10 | `session_info` | deferred | `[host]` `ctx.sessionQuery` has no statistics method and `tokenMeter` needs a live Session; `[repo]` `src/tools/sessions.js:105` is metadata-only | keep deferred |
+| G11 | LSP `rename` / `prepareRename` / `symbols` / `lsp_diagnostics` | host-native | `[repo]` `src/tools/misc.js:144`; `[host]` `LspOperation` closed union, `ctx.lsp` = `registerProvider` + `query` | host-bound, never duplicate |
+| G12 | `omd_lsp` parity label | partial (now documented) | `[repo]` `src/tools/misc.js:144`, and the Tools row at `docs/parity-omo-4.19.4.md:98` plus this table state the 4-operation union | close in 0.2 |
+
+### Documented deferred
+
+- `team_*` 12 tools + mailbox/worktrees/tmux panes — needs Host team sessions and
+  tmux panes the DSH base does not mount; the `/omd-team` wave protocol and
+  result files stand in.
+- Hash-anchored (hashline) `edit` — DSH `edit` is read-before-write with no hash
+  anchors, and a guard cannot add an anchor the tool never emits.
+- `interactive_bash` (tmux) — DSH has background jobs, `pwsh`, and session
+  terminals, not tmux panes.
+- `monitor_*` 4 tools — background output plus result files cover the need.
+- Skill-embedded MCP/OAuth + `skill_mcp` — DSH skills cannot start an MCP client
+  lifecycle; an MCP server belongs in profile config.
+- `.mcp.json` loader / context7 / grep_app — DSH ships `web_search`/`web_fetch`;
+  the rest are MCP servers the Host profile adds, not OMD.
+
+### Safe to ignore (host-bound)
+
+- `/goal` — Host native goal and idle continuation.
+- `grep` / `glob` — DSH native tools.
+- Think-mode effort escalation — Host reasoning-effort config, not an OMD hook.
+- Session recovery — Host session store concern.
+- Model capabilities — Host model registry.
+- Telemetry — Host side.
+- TUI / OpenClaw surface — no DSH counterpart.
+- Browser skills — need a host browser MCP.
+- Claude Code compat loaders — `claudeCodeMods` is a Host service; OMD loads no
+  mods.
+- OpenCode / Codex / Senpi / Pi editions — publication targets, not features.
+- LSP daemon — `ctx.lsp` is a provider registry; OMD registers none.
+- git-bash MCP — shell concern the Host owns.
+- `omd_background_list` — OMD addition; upstream ships output/cancel only.
+- `ulw-loop` — removed upstream; OMD keeps no counterpart.
+- Legacy rename/migration — n/a, OMD has no legacy install base.
