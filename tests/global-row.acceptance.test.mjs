@@ -454,10 +454,10 @@ test('delegation carries the role on the descriptor label and leaves the child p
     // The assertion is on key ABSENCE rather than on `undefined`, because
     // absence is the honest statement of intent and survives a future DSH that
     // distinguishes the two. (In this build it does not: the spawn provider
-    // materializes `composition.agentPreset` from `request.agentPreset`, so an
+    // materializes `composition.agentPreset` from `spec.agentPreset`, so an
     // explicit `undefined` takes the same `composeFrom` branch.)
     assert.equal(
-      Object.hasOwn(first.request, 'agentPreset'),
+      Object.hasOwn(first, 'agentPreset'),
       false,
       'the child preset must be omitted by default so the child inherits the parent',
     )
@@ -469,8 +469,8 @@ test('delegation carries the role on the descriptor label and leaves the child p
     await waitFor(() => env.state.activations.length > 1)
     const second = env.state.activations[1]
     assert.equal(second.label, 'omd:sisyphus-junior@quick')
-    assert.equal(Object.hasOwn(second.request, 'agentPreset'), false)
-    assert.equal(second.request.prompt[0].text.includes('<omd-delegation target="quick"'), true)
+    assert.equal(Object.hasOwn(second, 'agentPreset'), false)
+    assert.equal(second.prompt[0].text.includes('<omd-delegation target="quick"'), true)
   } finally {
     env.dispose()
   }
@@ -489,7 +489,7 @@ test('delegation.childPreset collapses a stray value into inheritance', async ()
       )
       await waitFor(() => env.state.activations.length > 0)
       assert.equal(
-        Object.hasOwn(env.state.activations[0].request, 'agentPreset'),
+        Object.hasOwn(env.state.activations[0], 'agentPreset'),
         false,
         `childPreset ${JSON.stringify(stray)} must collapse to inheritance`,
       )
@@ -508,7 +508,7 @@ test('delegation.childPreset pins the child preset when the deployment asks for 
       { agent: env.agent, signal: new AbortController().signal },
     )
     await waitFor(() => env.state.activations.length > 0)
-    assert.equal(env.state.activations[0].request.agentPreset, 'standard')
+    assert.equal(env.state.activations[0].agentPreset, 'standard')
     // The role still travels on the label: pinning the preset does not replace
     // the role channel, the two are independent.
     assert.equal(env.state.activations[0].label, 'omd:oracle')
@@ -526,7 +526,7 @@ test('delegation trims a childPreset that carries padding', async () => {
       { agent: env.agent, signal: new AbortController().signal },
     )
     await waitFor(() => env.state.activations.length > 0)
-    assert.equal(env.state.activations[0].request.agentPreset, 'standard')
+    assert.equal(env.state.activations[0].agentPreset, 'standard')
   } finally {
     env.dispose()
   }

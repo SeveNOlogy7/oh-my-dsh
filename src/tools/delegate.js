@@ -128,8 +128,11 @@ export function createDelegateTools(runtime) {
         }
         if (!ctx.get('subagents')) throw new Error('the subagent service is unavailable in this composition')
         const subagents = ctx.get('subagents')
-        const providers = subagents.list?.() ?? []
-        if (!providers.includes('spawn')) throw new Error('the spawn subagent provider is unavailable')
+        // The Host contract exposes no provider-listing method; it resolves the
+        // provider id itself and rejects an unknown one on activation.
+        if (typeof subagents.startActivation !== 'function') {
+          throw new Error('the subagent service exposes no activation surface')
+        }
 
         const target = args.subagent_type ?? args.category
         // The child's role rides on the descriptor label, and the role is not the
@@ -218,22 +221,22 @@ export function createDelegateTools(runtime) {
         const key = `${route.provider ?? 'inherit'}/${route.model ?? 'inherit'}`
         const start = async () => {
           if (exec.signal?.aborted) throw new Error('delegation aborted before start')
+          // The activation spec is flat: `prompt`, `parent`, `agentPreset`, and
+          // the rest sit beside `provider`/`label`, not under a `request` key.
           return subagents.startActivation({
             provider: 'spawn',
             label: roleLabelFor(role, category),
-            request: {
-              cwd: state.cwd,
-              prompt: blocks,
-              parent,
-              // Conditional spread, not `agentPreset: childPreset`: the key must be
-              // absent so that `request.agentPreset` reads `undefined` and DSH
-              // takes its `composeFrom` path instead of mounting a named preset —
-              // that path is the whole point of the null default.
-              ...(childPreset ? { agentPreset: childPreset } : {}),
-              agentOptions: Object.keys(agentOptions).length ? agentOptions : undefined,
-              outputSchema: isPlainObject(args.output_schema) ? args.output_schema : undefined,
-              maxDepth,
-            },
+            cwd: state.cwd,
+            prompt: blocks,
+            parent,
+            // Conditional spread, not `agentPreset: childPreset`: the key must be
+            // absent so that `spec.agentPreset` reads `undefined` and DSH
+            // takes its `composeFrom` path instead of mounting a named preset —
+            // that path is the whole point of the null default.
+            ...(childPreset ? { agentPreset: childPreset } : {}),
+            agentOptions: Object.keys(agentOptions).length ? agentOptions : undefined,
+            outputSchema: isPlainObject(args.output_schema) ? args.output_schema : undefined,
+            maxDepth,
             signal: exec.signal,
             delivery: background ? 'parent' : 'caller',
           })

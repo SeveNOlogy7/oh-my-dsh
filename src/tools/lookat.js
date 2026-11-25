@@ -87,20 +87,20 @@ export function createLookAtTools(runtime) {
         if (route.reasoningEffort) agentOptions.reasoningEffort = route.reasoningEffort
         if (route.maxTokens) agentOptions.maxTokens = route.maxTokens
         try {
+          // The activation spec is flat: `prompt`, `parent`, and the rest sit
+          // beside `provider`/`label`, not under a `request` key.
           const activation = await subagents.startActivation({
             provider: 'spawn',
             label: roleLabelFor('multimodal-looker'),
-            request: {
-              cwd: state.cwd,
-              prompt: blocks,
-              parent,
-              // `delegation.childPreset` governs this child exactly as it governs
-              // `omd_delegate`: absent key means "inherit the parent's preset",
-              // and the looker's role is carried by `label`.
-              ...(childPreset ? { agentPreset: childPreset } : {}),
-              agentOptions: Object.keys(agentOptions).length ? agentOptions : undefined,
-              maxDepth: 1,
-            },
+            cwd: state.cwd,
+            prompt: blocks,
+            parent,
+            // `delegation.childPreset` governs this child exactly as it governs
+            // `omd_delegate`: absent key means "inherit the parent's preset",
+            // and the looker's role is carried by `label`.
+            ...(childPreset ? { agentPreset: childPreset } : {}),
+            agentOptions: Object.keys(agentOptions).length ? agentOptions : undefined,
+            maxDepth: 1,
             signal: exec.signal,
             delivery: 'caller',
           })

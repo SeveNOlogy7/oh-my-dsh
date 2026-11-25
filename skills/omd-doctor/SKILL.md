@@ -35,7 +35,7 @@ Quote the exact check id, status, and detail. Never summarize a FAIL into
 Required services (`services`), that no `omd-*` preset is left registered
 (`presets`, plus a `preset-detail` row carrying each leftover's own failure
 reason), the role this session runs as (`active-role`) and the preset it runs on
-(`active-preset`), the spawn provider, the host Agent Teams presence
+(`active-preset`), subagent activation, the host Agent Teams presence
 (`agent-teams`), `.omd/` state and config readability (including JSONC
 diagnostics and BOM scanning), the browser bundle (`client-half`), and the
 upstream lock against `OMO_VERSION`/`OMO_COMMIT`.

@@ -175,11 +175,18 @@ export async function runDoctor({ ctx, agent, workspace, config, agentId, source
       : check('config', 'PASS', `${sources.length || loaded.sources.length} source(s), no diagnostics`),
   )
 
-  const providers = ctx.get('subagents')?.list?.() ?? []
+  // Constraint: the Host exposes no provider list, so activation is the only
+  // surface to probe and the Host resolves the provider id on activation.
+  const subagents = ctx.get('subagents')
   checks.push(
-    providers.includes('spawn')
-      ? check('spawn-provider', 'PASS', `providers: ${providers.join(', ')}`)
-      : check('spawn-provider', 'FAIL', 'spawn provider is not registered', 'Mount @deepseek-ai/dsh-subagent-spawn-in-process.'),
+    typeof subagents?.startActivation === 'function'
+      ? check('spawn-provider', 'PASS', 'subagent activation available; the Host resolves the provider id')
+      : check(
+          'spawn-provider',
+          'FAIL',
+          'the subagent service exposes no startActivation',
+          'Mount @deepseek-ai/dsh-subagent-spawn-in-process.',
+        ),
   )
 
   // Agent Teams is part of the Host's base composition, so its absence is a

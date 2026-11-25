@@ -435,12 +435,12 @@ test('omd_look_at registers even when the row cannot resolve the agent services 
   const activation = state.activations[0]
   assert.equal(activation.label, 'omd:multimodal-looker')
   assert.deepEqual(
-    activation.request.agentOptions,
+    activation.agentOptions,
     { provider: 'vision-provider', model: 'vision-model', reasoningEffort: 'high' },
     'the looker child must start on the configured role route, not the parent model',
   )
   assert.equal(
-    Object.hasOwn(activation.request, 'agentPreset'),
+    Object.hasOwn(activation, 'agentPreset'),
     false,
     'the looker preset is omitted by default so the child inherits the parent one',
   )
