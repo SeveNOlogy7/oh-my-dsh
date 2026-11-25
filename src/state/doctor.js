@@ -182,6 +182,37 @@ export async function runDoctor({ ctx, agent, workspace, config, agentId, source
       : check('spawn-provider', 'FAIL', 'spawn provider is not registered', 'Mount @deepseek-ai/dsh-subagent-spawn-in-process.'),
   )
 
+  // Agent Teams is part of the Host's base composition, so its absence is a
+  // version problem rather than a configuration one. The team protocol prefers
+  // its board and falls back to the file board when the service is missing.
+  const agentTeams = ctx.get('agentTeams')
+  if (agentTeams && typeof agentTeams.isEnabled === 'function') {
+    let enabled = false
+    try {
+      enabled = agentTeams.isEnabled(agent) === true
+    } catch {
+      enabled = false
+    }
+    checks.push(
+      check(
+        'agent-teams',
+        'PASS',
+        enabled
+          ? 'host Agent Teams enabled; the team_task_* board is available'
+          : 'host Agent Teams present; enable Team mode to use the team_task_* board',
+      ),
+    )
+  } else {
+    checks.push(
+      check(
+        'agent-teams',
+        'WARN',
+        'host Agent Teams unavailable; /omd-team falls back to the file board',
+        'Update DeepSeek Harness to a release that mounts the base agent-team rows.',
+      ),
+    )
+  }
+
   if (ctx.get('subprocess')?.resolveExecutable) {
     try {
       await ctx.get('subprocess').resolveExecutable('sg')

@@ -133,7 +133,8 @@ ledger, next action. Also available as `/omd-status`.
 No parameters. Runs the report-only self-check — required services, that no
 `omd-*` preset is left registered (`presets`, with a `preset-detail` row carrying
 each leftover's own failure reason), the role the session resolved (`active-role`)
-and the preset it runs on (`active-preset`), the spawn provider, `.omd/` state
+and the preset it runs on (`active-preset`), the spawn provider, the host Agent
+Teams presence (`agent-teams`), `.omd/` state
 and config readability, the browser bundle (`client-half`), upstream lock — and
 returns one
 `PASS|WARN|FAIL <id>: <detail>` line per check, a `fix:` line for anything that

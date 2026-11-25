@@ -152,7 +152,7 @@ refactor、AI-slop 协议。
 
 OmO 4.19.4 中与宿主强绑定的能力在
 [`docs/parity-omo-4.19.4.md`](docs/parity-omo-4.19.4.md) 逐项登记为替代或延期：
-dashboard/Client UI、Team Mode 的 `team_*` 工具族、hashline 编辑、交互式 tmux、
+dashboard/Client UI、Team Mode 的具名团队生命周期与 tmux 面板、hashline 编辑、交互式 tmux、
 skill-embedded MCP、CodeGraph、Claude Code hooks。
 
 ## 许可

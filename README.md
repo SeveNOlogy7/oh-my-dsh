@@ -184,7 +184,7 @@ init-deep, refactor, and AI-slop protocols.
 
 Host-bound OmO 4.19.4 features are mapped or deferred with reasons in
 [`docs/parity-omo-4.19.4.md`](docs/parity-omo-4.19.4.md): dashboard/Client UI,
-Team Mode's `team_*` tool family, hashline edit, interactive tmux,
+Team Mode's named-team lifecycle and tmux panes, hashline edit, interactive tmux,
 skill-embedded MCP, CodeGraph, and Claude Code hooks.
 
 ## License

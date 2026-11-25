@@ -13,7 +13,7 @@ harness's own `/goal` stays available.
 | `/omd-ulw` | `<goal>` | Sets ultrawork mode and starts a turn with the goal. |
 | `/omd-plan` | `<goal>` | Sets planning mode; interview and draft. |
 | `/omd-hyperplan` | `<goal>` | Sets hyperplan mode; five adversarial lanes. |
-| `/omd-team` | `<goal>` | Sets team mode; lead + parallel wave protocol. |
+| `/omd-team` | `<goal>` | Sets team mode; lead + parallel team over the host Agent Teams board. |
 | `/omd-start-work` | `[plan]` | Selects a plan (arg, boulder, latest approved, latest), writes the boulder slot, and sends the Atlas protocol. |
 | `/omd-stop-continuation` | — | Clears the mode, pauses the boulder, pauses an active DSH goal. |
 | `/omd-handoff` | — | Writes `.omd/handoff/<timestamp>.md` with state, git status, recent transcript, and next action. |

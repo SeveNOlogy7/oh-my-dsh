@@ -60,7 +60,7 @@ export const MESSAGES = {
     'command.omd-ulw.description': 'Enter ultrawork mode and pursue the goal until verified.',
     'command.omd-plan.description': 'Enter interview planning mode and produce an approved plan.',
     'command.omd-hyperplan.description': 'Run five adversarial planning lanes and produce a stronger plan.',
-    'command.omd-team.description': 'Run a lead + parallel worker wave protocol.',
+    'command.omd-team.description': 'Run a lead + parallel team over the DSH Agent Teams board.',
     'command.omd-start-work.description':
       'Start or resume execution of an approved plan with the Atlas protocol.',
     'command.omd-stop-continuation.description':
@@ -97,7 +97,7 @@ export const MESSAGES = {
       'Research a codebase or external system with citations and explicit uncertainty.',
     'skill.omd-ulw-research.whenToUse':
       'Use when facts are missing, when a design depends on upstream behavior, or before planning.',
-    'skill.omd-team-mode.description': 'Run a lead plus parallel worker wave with file-based results.',
+    'skill.omd-team-mode.description': 'Run a lead plus parallel workers over the DSH Agent Teams board.',
     'skill.omd-team-mode.whenToUse':
       'Use for /omd-team or a task that benefits from several independent workers.',
     'skill.omd-debugging.description': 'Reproduce, isolate, and fix a defect with a regression test.',
@@ -152,7 +152,7 @@ export const MESSAGES = {
     'command.omd-ulw.description': '进入 ultrawork 模式，持续执行目标直到完成验证。',
     'command.omd-plan.description': '进入访谈式规划模式，产出经确认的计划。',
     'command.omd-hyperplan.description': '运行五路对抗式规划，产出更稳健的计划。',
-    'command.omd-team.description': '启动「主控 + 并行 worker 波次」协议。',
+    'command.omd-team.description': '以 DSH Agent Teams 任务板运行「主控 + 并行团队」。',
     'command.omd-start-work.description': '按 Atlas 协议开始或继续执行已确认的计划。',
     'command.omd-stop-continuation.description': '停止 OMD 续跑，暂停 boulder，并暂停进行中的 goal。',
     'command.omd-handoff.description': '为新会话撰写续接用的交接文档。',
@@ -179,7 +179,7 @@ export const MESSAGES = {
     'skill.omd-refactor.whenToUse': '用于 /omd-refactor、结构性清理，或在不改变行为的前提下抽取模块。',
     'skill.omd-ulw-research.description': '调研代码库或外部系统，给出引用来源并明确标注不确定之处。',
     'skill.omd-ulw-research.whenToUse': '在事实缺失、方案依赖上游行为，或开始规划之前使用。',
-    'skill.omd-team-mode.description': '以主控加并行 worker 波次的方式推进，结果落盘留存。',
+    'skill.omd-team-mode.description': '以主控加并行 worker 团队推进，任务落在宿主 Agent Teams 任务板。',
     'skill.omd-team-mode.whenToUse': '用于 /omd-team，或适合多个独立 worker 并行的任务。',
     'skill.omd-debugging.description': '复现、定位并修复缺陷，并补上回归测试。',
     'skill.omd-debugging.whenToUse': '用于失败的测试、运行时缺陷，或与规格不符的行为。',

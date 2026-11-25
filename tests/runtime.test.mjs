@@ -122,6 +122,9 @@ test('commands initialize .omd, set modes, and render status', async () => {
   assert.ok(doctor)
   const doctorResult = await doctor.execute({}, { agent: env.agent, signal: new AbortController().signal })
   assert.match(doctorResult, /summary:/)
+  // The host team capability always gets a row: this fake Host has no
+  // `agentTeams` service, so the report must warn about the file-board fallback.
+  assert.match(doctorResult, /(PASS|WARN) agent-teams: /)
   assert.equal(env.state.followups.length, 1)
   env.dispose()
 })

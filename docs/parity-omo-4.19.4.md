@@ -50,7 +50,7 @@ DSH fixes a step's model before dispatch. See `docs/configuration.md`.
 | OmO 4.19.4 | OMD | Status |
 |---|---|---|
 | `ultrawork` / `ulw` keyword | keyword detector + mode section + 8-step protocol | ported |
-| `team` keyword | `/omd-team` wave protocol | adapted |
+| `team` keyword | `/omd-team` over the DSH Agent Teams task board | adapted (DSH Agent Teams) |
 | `hyperplan` keyword | `/omd-hyperplan` five-lane protocol | ported |
 | `hyperplan` + `ulw` combo | `hyperplan-ulw` mode | ported |
 | Prometheus interview → draft → approval → plan | `/omd-plan`, `.omd/drafts`, `.omd/plans` | ported |
@@ -93,7 +93,7 @@ has no OmO tool counterpart because OmO ships its doctor as a command.
 | `task_create/get/list/update` | `omd_task_*` behind `taskSystem.enabled` | ported |
 | `interactive_bash` (tmux) | deferred: DSH has jobs/pwsh, not tmux panes | deferred |
 | hashline `edit` | deferred: DSH edit is read-before-write, not hash-anchored | deferred |
-| `team_*` (12 tools) | deferred: `/omd-team` wave protocol instead | adapted/deferred |
+| `team_*` (12 tools) | DSH Agent Teams: `team_task_*`, `subagent`, `send_message`; per-member worktree needs the optional forge bundle; named team entity, mailbox files, and tmux deferred | adapted (host team board; entity/lifecycle deferred) |
 | `monitor` | deferred: DSH jobs/background output | deferred |
 | LSP MCP (diagnostics, definitions, refs, rename, symbols) | `omd_lsp` (4 ops) + `omd_diagnostics` (configured commands) | adapted (4-operation closed union; host-bound) |
 | AST-grep tool | `omd-ast-grep` skill driving `sg` | adapted |
@@ -198,8 +198,10 @@ discrepancy is upstream documentation drift, not an OMD coverage gap.
 ### Team-only hooks
 
 `teamToolGating`, team transform/mailbox injectors, and direct team session
-handlers are **deferred** with Team Mode's tool family. v0.1.0 uses the
-`/omd-team` wave protocol and result files.
+handlers are **adapted**: the Host's Agent Teams registration gates the
+`team_task_*` tools, and `/omd-team` drives that board. The mailbox-file
+injectors stay deferred because the Host keeps team state in the Lead Session
+log rather than per-member inbox files.
 
 ## Commands
 
@@ -227,6 +229,14 @@ One sentence per flagged row, against `docs/reference/features.md` at v4.19.4
   `/omd-start-work` takes `[plan]` only, so all three flags are missing;
   `--worktree` reduces to a prompt instruction, while `--make-pr` and `--ship`
   are host-bound (they need forge and CI integration DSH does not expose).
+
+## Team runs
+
+A team run has exactly one canonical task board: DSH Agent Teams'
+`team_task_*` board in the Lead Session log. The `.omd/runtime/<runId>/tasks/`
+file board is the fallback for a Host that exposes no Agent Teams, and
+`.omd/tasks` (`omd_task_*`) is the personal task system — never mirror team
+tasks into either one.
 
 ## Skills
 
@@ -272,7 +282,8 @@ host-bound for the same reason and stay deferred.
 
 - OmO's exact prompt text, literal model/provider ids, OpenCode/Codex/Senpi
   adapters.
-- Team Mode's 12 `team_*` tools and tmux visualization.
+- Team Mode's named-team lifecycle (`team_create`/`team_delete`/`team_status`/
+  `team_list`), mailbox files with ack/TTL, and tmux panes.
 - Hash-anchored edit, interactive tmux, CodeGraph, Claude Code hooks,
   skill-embedded MCP.
 - `mass ulw` (5.x) and the removed ralph loop.
@@ -296,13 +307,17 @@ recorded Host contract (cordis_inspect).
 | G9 | `search` / `analyze` keyword activation | partial | `[repo]` `src/hooks/keyword.js:15` `DIRECTIVE` lists hyperplan-ulw/ultrawork/ulw/team/hyperplan only; `[upstream]` `docs/reference/features.md:875 @ v4.19.4 (commit b072d27)` | close in 0.2 |
 | G10 | `session_info` | deferred | `[host]` `ctx.sessionQuery` has no statistics method and `tokenMeter` needs a live Session; `[repo]` `src/tools/sessions.js:105` is metadata-only | keep deferred |
 | G11 | LSP `rename` / `prepareRename` / `symbols` / `lsp_diagnostics` | host-native | `[repo]` `src/tools/misc.js:144`; `[host]` `LspOperation` closed union, `ctx.lsp` = `registerProvider` + `query` | host-bound, never duplicate |
-| G12 | `omd_lsp` parity label | partial (now documented) | `[repo]` `src/tools/misc.js:144`, and the Tools row at `docs/parity-omo-4.19.4.md:98` plus this table state the 4-operation union | close in 0.2 |
+| G12 | `omd_lsp` parity label | partial (now documented) | `[repo]` `src/tools/misc.js:144`, and the LSP row of the Tools table above plus this table state the 4-operation union | close in 0.2 |
+| G13 | Team Mode named-team lifecycle, mailbox files, tmux, per-team caps | partial | `[host]` Agent Teams base rows (`agent-team`, `tool-agent-team`) + `agentTeams` service, `TeamId` = root Session; `[upstream]` `docs/guide/team-mode.md @ v4.19.4 (commit b072d27)` | close in 0.2 where host-bound; keep the protocol on the host board |
 
 ### Documented deferred
 
-- `team_*` 12 tools + mailbox/worktrees/tmux panes — needs Host team sessions and
-  tmux panes the DSH base does not mount; the `/omd-team` wave protocol and
-  result files stand in.
+- Named team entity (`team_create`/`team_delete`/`team_status`/`team_list`),
+  mailbox files with ack/TTL/payload caps, and tmux panes — the Host's Agent
+  Teams board covers the shared task list and messaging, but a team is the
+  implicit root-Session tree (`TeamId`), not a named registry; `/omd-team`
+  drives the host board and falls back to the file board when the Host exposes
+  no Agent Teams.
 - Hash-anchored (hashline) `edit` — DSH `edit` is read-before-write with no hash
   anchors, and a guard cannot add an anchor the tool never emits.
 - `interactive_bash` (tmux) — DSH has background jobs, `pwsh`, and session

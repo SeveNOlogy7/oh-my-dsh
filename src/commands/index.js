@@ -176,7 +176,7 @@ export function createCommands(runtime) {
 
   add({
     name: 'omd-team',
-    description: t('command.omd-team.description', 'Run a lead + parallel worker wave protocol.'),
+    description: t('command.omd-team.description', 'Run a lead + parallel team over the DSH Agent Teams board.'),
     input: { hint: '<goal>' },
     handler: async ({ agent, rawInput }) => {
       const goal = inputText(rawInput)
@@ -185,7 +185,9 @@ export function createCommands(runtime) {
       await runtime.setMode(agent, 'team')
       await appendLedger(state.cwd, { event: 'mode-set', mode: 'team', agent: agent.id })
       followup(agent, `[team] ${goal || 'Run the current work as a parallel team.'}`)
-      return success('team mode active. The lead delegates independent tasks and verifies result files.')
+      return success(
+        'team mode active. The lead uses the host Agent Teams board when available and verifies each result.',
+      )
     },
   })
 
