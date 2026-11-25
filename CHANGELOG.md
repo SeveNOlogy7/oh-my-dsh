@@ -1,5 +1,32 @@
 # Changelog
 
+## 0.1.5 — 2026-11-25
+
+### Added
+
+- **Team runs use the host Agent Teams board.** `/omd-team`, the `team` mode
+  prompt, and the `omd-team-mode` skill prefer `team_task_*` plus a named
+  `subagent` spawn, and keep the `.omd/runtime/<runId>/tasks/` file board as the
+  fallback for a Host without Agent Teams. The parity matrix marks the team
+  workflow `adapted (DSH Agent Teams)` and records G13 for what the Host still
+  lacks: a named team entity, mailbox files with ack/TTL, tmux panes, and
+  per-team caps. `docs/parity-omo-4.19.4.md` names the one canonical board for a
+  team run.
+- **`omd_doctor` reports `agent-teams`.** The row says whether the Host exposes
+  Agent Teams and whether the session has it enabled, and warns with the
+  file-board fallback when it is absent.
+
+### Fixed
+
+- **Delegation follows the DSH 0.2.2 subagent activation contract.**
+  `omd_delegate` and `omd_look_at` passed the start request under a `request`
+  key and gated on a provider list the service no longer exposes, so on the
+  current Host every delegation failed with "the spawn subagent provider is
+  unavailable". Both now pass a flat activation spec (`prompt`, `parent`,
+  `agentPreset`, … beside `provider`/`label`) and check the activation surface
+  instead of a provider list; `omd_doctor`'s `spawn-provider` row reports the
+  same surface.
+
 ## 0.1.4 — 2026-11-13
 
 > 0.1.3 was committed on 2026-11-09 but never tagged or published (no `v0.1.3`
