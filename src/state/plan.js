@@ -84,6 +84,53 @@ export function nextOpenTask(doc) {
   return doc.open[0] ?? null
 }
 
+/**
+ * Plan states that mean "this will not run in this session". The continuation
+ * hook reads them so a session whose owner already stopped is not nudged open
+ * again; a plan the agent marked `execution: deferred` is a decision, not an
+ * open task.
+ */
+const CLOSED_STATUSES = new Set(['deferred', 'paused', 'cancelled', 'canceled', 'abandoned', 'superseded'])
+
+export function planDeferred(doc) {
+  if (!doc) return false
+  if (CLOSED_STATUSES.has(String(doc.status ?? '').toLowerCase())) return true
+  const execution = doc.frontmatter?.execution
+  if (typeof execution !== 'string') return false
+  return /^(?:deferred|stopped|paused|cancell?ed|on[ -]hold)\b/i.test(execution.trim())
+}
+
+/**
+ * The newest plan written or updated at or after `since`, or null.
+ *
+ * Continuation used to read only the boulder slot, so a plan written straight
+ * to `.omd/plans` — what every keyword-triggered mode actually does — stayed
+ * invisible and the gates had no plan to judge. The `since` bound is the same
+ * rule the plan gate applies: a plan left over from an earlier session is not
+ * this run's work.
+ */
+export async function planSince(workspace, since) {
+  const sinceMs = Date.parse(since)
+  if (!Number.isFinite(sinceMs)) return null
+  const dir = omdPath(workspace, 'plans')
+  const files = await listFiles(dir, (name) => name.endsWith('.md'))
+  let best = null
+  for (const file of files) {
+    let mtime
+    try {
+      mtime = (await fs.stat(file)).mtimeMs
+    } catch {
+      continue
+    }
+    if (mtime < sinceMs) continue
+    if (best && mtime <= best.mtime) continue
+    const read = await readTextSafe(file)
+    if (!read.ok) continue
+    best = { doc: parsePlan(read.value, file), mtime }
+  }
+  return best?.doc ?? null
+}
+
 export function validatePlanFormat(text) {
   const doc = parsePlan(text)
   const warnings = []

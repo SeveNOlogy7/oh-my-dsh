@@ -7,15 +7,15 @@ import { userMessage } from '../core/message.js'
 import { isInside } from '../core/paths.js'
 import { readTextSafe } from '../core/atomic.js'
 import { readBoulderSlot } from '../state/boulder.js'
-import { readPlan, validatePlanFormat } from '../state/plan.js'
+import { planSince, readPlan, validatePlanFormat } from '../state/plan.js'
 import { TaskStore } from '../state/tasks.js'
 import { bumpContinuation } from '../state/modes.js'
 import { loadRules, makeRulesSection } from './rules.js'
-import { detectMode, continuationText } from './keyword.js'
+import { detectMode } from './keyword.js'
+import { continuationDecision } from './continuation.js'
 import { extractWrittenText, findCommentSlop, formatSlopWarning } from './comment.js'
 import {
   baselineGateReason,
-  evidenceSteerText,
   isDeliverableFile,
   isVerificationCommand,
   planGateReason,
@@ -76,6 +76,22 @@ function isPlanPath(workspace, file) {
 function isNotepadPath(workspace, file) {
   const absolute = path.isAbsolute(file) ? file : path.resolve(workspace, file)
   return isInside(path.join(workspace, '.omd', 'notepads'), absolute)
+}
+
+/**
+ * The plan this run is working on: the boulder's active plan when a boulder
+ * names one, otherwise the newest plan file written since the mode started.
+ * Reading only the boulder slot left every keyword-triggered mode blind to the
+ * plan the agent had just written, so no gate could ever see the work from the
+ * plan side.
+ */
+async function currentPlan(state) {
+  const slot = await readBoulderSlot(state.cwd, state.stem)
+  if (slot.ok && slot.value?.active_plan) {
+    const named = await readPlan(state.cwd, slot.value.active_plan)
+    if (named) return named
+  }
+  return planSince(state.cwd, state.mode?.since)
 }
 
 /**
@@ -470,6 +486,11 @@ export async function installAgentHooks(runtime, agent, state) {
           state.modeText = await loadModePrompt(mode)
           state.continuationRounds = 0
           state.stopped = false
+          // A new mode is a new run: the stall bookkeeping of the old one must
+          // not count against it.
+          state.continuationSkip = null
+          state.idleContinuationRounds = 0
+          state.continuationToolCount = undefined
           await runtime.ledger(state.cwd, { event: 'keyword-mode', mode, agent: state.role })
         }),
       )
@@ -488,9 +509,7 @@ export async function installAgentHooks(runtime, agent, state) {
             // goal service optional
           }
           if (typeof agent.steer !== 'function') return
-          let plan = null
-          const slot = await readBoulderSlot(state.cwd, state.stem)
-          if (slot.ok && slot.value.active_plan) plan = await readPlan(state.cwd, slot.value.active_plan)
+          const plan = await currentPlan(state)
           let taskSummary = null
           try {
             const summary = await new TaskStore(state.cwd).summary()
@@ -498,31 +517,38 @@ export async function installAgentHooks(runtime, agent, state) {
           } catch {
             taskSummary = null
           }
-          let text = continuationText(state, { plan, tasks: taskSummary })
-          let gate = 'open-work'
-          if (mode === 'ultrawork') {
-            const tracked = evidence()
-            const planOpen = plan && plan.total > 0 ? plan.open.length : 0
-            const tasksOpen = taskSummary?.open ?? 0
-            // A plan file with no task rows is not orchestration work: the plan
-            // gate still refuses deliverable edits until a real one is written.
-            const hasPlan = Boolean(plan && plan.total > 0)
-            const openWork = planOpen > 0 || tasksOpen > 0 || (!hasPlan && tracked.artifacts === 0)
-            // A completed plan with no deliverables is still a completion claim:
-            // it needs a verification run before the turn may close.
-            const planComplete = hasPlan && planOpen === 0 && tasksOpen === 0
-            const missingEvidence =
-              state.config.ultrawork.dualEvidence &&
-              (tracked.artifacts > 0 || planComplete) &&
-              (tracked.verification === 0 || tracked.verifiedAt < tracked.artifacts)
-            // A completed plan with recorded evidence is finished work: let the
-            // turn close instead of nudging it open again.
-            if (!openWork && !missingEvidence) return
-            if (!openWork) {
-              text = evidenceSteerText()
-              gate = 'dual-evidence'
-            }
+          // A round that executed no tool produced nothing observable: the
+          // model answered a continuation with text alone. One such round can
+          // be legitimate; a second one is a stalled loop that more nudges
+          // cannot fix, so the decision below closes the turn instead.
+          const toolsRun = state.toolCount ?? 0
+          const idleRounds =
+            state.continuationRounds > 0 && state.continuationToolCount === toolsRun
+              ? (state.idleContinuationRounds ?? 0) + 1
+              : 0
+          const decision = continuationDecision(state, {
+            plan,
+            tasks: taskSummary,
+            tracked: evidence(),
+            dualEvidence: state.config.ultrawork.dualEvidence,
+            idleRounds,
+          })
+          state.idleContinuationRounds = idleRounds
+          if (!decision.steer) {
+            // Record why the nudging stopped once per reason, so the session log
+            // explains a silent close without writing a line on every turn.
+            if (state.continuationSkip === decision.reason) return
+            state.continuationSkip = decision.reason
+            await runtime.ledger(state.cwd, {
+              event: 'continuation-skip',
+              mode,
+              agent: state.role,
+              reason: decision.reason,
+            })
+            return
           }
+          state.continuationSkip = null
+          state.continuationToolCount = toolsRun
           state.continuationRounds += 1
           await bumpContinuation(state.cwd, state.stem, mode)
           await runtime.ledger(state.cwd, {
@@ -530,9 +556,9 @@ export async function installAgentHooks(runtime, agent, state) {
             mode,
             round: state.continuationRounds,
             agent: state.role,
-            gate,
+            gate: decision.gate,
           })
-          agent.steer(userMessage(text, { kind: 'omd' }))
+          agent.steer(userMessage(decision.text, { kind: 'omd' }))
         }),
       )
 
@@ -561,6 +587,9 @@ export async function installAgentHooks(runtime, agent, state) {
       push(
         agent.ctx.on('tools/post-execute', async (exec, result, next) => {
           const decision = await next()
+          // Every executed call is progress the continuation stall guard can
+          // see: a round that ran no tool at all changed nothing.
+          state.toolCount = (state.toolCount ?? 0) + 1
           // Track what an ultrawork run has actually verified and written. The
           // tally feeds the baseline gate and the dual-evidence completion gate;
           // it counts only calls that reached execution (a guard refusal never

@@ -10,6 +10,21 @@
   `ops_bash` and `ops_pwsh`; on such a host a passing verification never counted,
   so the gates could not be satisfied. `src/hooks/index.js` now matches every
   shell name it knows (`sh`, `zsh` included) through one `SHELL_TOOL_NAMES` set.
+- **A finished mode no longer keeps the turn open.** The continuation hook
+  asked "is work still open?" only in `ultrawork`; every other continuable mode
+  (`hyperplan`, `hyperplan-ulw`, `team`) fell through to an unconditional
+  `[OMD CONTINUATION]` steer on each turn close and only stopped at
+  `ultrawork.maxContinuationRounds`, so a session that had already produced its
+  approved plan was nudged up to 20 times for nothing. The gate is now
+  mode-aware (`src/hooks/continuation.js`): `hyperplan` continues only until a
+  non-draft plan exists, the executing modes only while plan rows or tasks are
+  open, and `ultrawork` keeps its dual-evidence requirement. Three further
+  causes of the same loop are fixed with it: the plan is now discovered in
+  `.omd/plans` (matched against the mode's start time) instead of only through a
+  boulder slot, a plan whose status or `execution:` says `deferred`/`paused`/
+  `cancelled` is honoured as a stop, and a second continuation round that ran no
+  tool at all ends the turn instead of being nudged again. The ledger records
+  `continuation-skip` with the reason, so a silent close stays explainable.
 
 ## 0.1.5 — 2026-11-25
 
