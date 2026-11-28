@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.1.9 — 2026-11-28
 
 ### Added
 
@@ -387,7 +387,7 @@ surface is reachable from tools were re-checked on a restarted Host.
   provenance attestation. Version 0.1.0 was published by hand, because a trusted
   publisher cannot be bound before the package exists on the registry.
 
-## Unreleased
+## 0.1.9 — 2026-11-28
 
 ### Added
 
