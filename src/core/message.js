@@ -32,12 +32,20 @@ import { randomUUID } from 'node:crypto'
  *   wording — a plan title containing "team" would otherwise switch modes.
  *   Producer kinds are an open, merge-extensible set in DSH, and only
  *   `runtime-context` is special-cased by the loop.
+ * @param attachments - durable `ImageBlock` / `FileBlock` values the command
+ *   executor admitted for this invocation. They are model-facing blocks, not
+ *   records to rebuild, so they are passed through unchanged and in order,
+ *   ahead of the text — the same shape `dsh-plan-mode` and `dsh-command-goal`
+ *   construct for their own messages. An attachment-only turn (empty text)
+ *   carries no empty text block, mirroring those two commands.
  */
-export function userMessage(text, source = { kind: 'user' }) {
+export function userMessage(text, source = { kind: 'user' }, attachments = []) {
+  const blocks = Array.isArray(attachments) ? attachments : []
+  const body = String(text ?? '')
   return {
     id: randomUUID(),
     role: 'user',
-    content: [{ type: 'text', text: String(text ?? '') }],
+    content: [...blocks, ...(body === '' && blocks.length > 0 ? [] : [{ type: 'text', text: body }])],
     source,
   }
 }

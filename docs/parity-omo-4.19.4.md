@@ -221,8 +221,8 @@ log rather than per-member inbox files.
 One sentence per flagged row, against `docs/reference/features.md` at v4.19.4
 (commit b072d27):
 
-- `/init-deep [--create-new] [--max-depth=N]` (`:344`): `/omd-init-deep` takes no
-  input, so neither flag is implemented.
+- `/init-deep [--create-new] [--max-depth=N]` (`:344`): `/omd-init-deep` takes
+  only optional context text, so neither flag is implemented.
 - `/refactor <target> [--scope=<file|module|project>] [--strategy=<safe|aggressive>]`
   (`:415`): `/omd-refactor` takes `<target>` only, so both options are missing.
 - `/start-work [plan-name] [--worktree <path>] [--make-pr] [--ship]` (`:433`):
@@ -302,9 +302,9 @@ recorded Host contract (cordis_inspect).
 | G2 | File-based prompts (`prompt` / `prompt_append` via `file://`, `~`) | deferred | `[repo]` `src/runtime/runtime.js:72` reads only an inline `promptAppend` string; the schema has no `prompt` property | keep deferred |
 | G3 | Per-agent tool allow/deny config | partial | `[repo]` `src/agents/policies.js:8` hard-codes the per-role policy and `schema/omd-config.schema.json:52` has no tool map; `[host]` `ctx.tools.restrict` can only subtract | close in 0.2 |
 | G4 | `is_unstable_agent`, `disable`, `max_prompt_tokens` | deferred | `[repo]` `src/core/defaults.js:54` `NEUTRAL_AGENT_SETTINGS` carries none of the three | keep deferred |
-| G5 | `/init-deep` flags | partial | `[repo]` `src/commands/index.js:355` registers no input; `[upstream]` `docs/reference/features.md:344 @ v4.19.4 (commit b072d27)` | close in 0.2 |
-| G6 | `/refactor` flags | partial | `[repo]` `src/commands/index.js:366` takes `<target>` only; `[upstream]` `docs/reference/features.md:415 @ v4.19.4 (commit b072d27)` | close in 0.2 |
-| G7 | `/start-work` flags | partial | `[repo]` `src/commands/index.js:193` takes `[plan]` only; `[upstream]` `docs/reference/features.md:433 @ v4.19.4 (commit b072d27)` | keep deferred |
+| G5 | `/init-deep` flags | partial | `[repo]` `src/commands/index.js:390` accepts optional `[context]` only, no flags; `[upstream]` `docs/reference/features.md:344 @ v4.19.4 (commit b072d27)` | close in 0.2 |
+| G6 | `/refactor` flags | partial | `[repo]` `src/commands/index.js:407` takes `<target>` only; `[upstream]` `docs/reference/features.md:415 @ v4.19.4 (commit b072d27)` | close in 0.2 |
+| G7 | `/start-work` flags | partial | `[repo]` `src/commands/index.js:264` takes `[plan]` only; `[upstream]` `docs/reference/features.md:433 @ v4.19.4 (commit b072d27)` | keep deferred |
 | G8 | Custom command loading (`.opencode/command`, `.claude/commands`) | deferred | `[repo]` `src/commands/names.js:19` is a fixed list; `[host]` `ctx.commands` is the Host registry, so dispatch may be host-owned | keep deferred |
 | G9 | `search` / `analyze` keyword activation | partial | `[repo]` `src/hooks/keyword.js:15` `DIRECTIVE` lists hyperplan-ulw/ultrawork/ulw/team/hyperplan only; `[upstream]` `docs/reference/features.md:875 @ v4.19.4 (commit b072d27)` | close in 0.2 |
 | G10 | `session_info` | deferred | `[host]` `ctx.sessionQuery` has no statistics method and `tokenMeter` needs a live Session; `[repo]` `src/tools/sessions.js:105` is metadata-only | keep deferred |

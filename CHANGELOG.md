@@ -1,5 +1,22 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- **Commands that hand the agent a message accept image and file
+  attachments.** A composer refuses an attachment for any command whose
+  catalog descriptor does not declare `input.attachments`, with the localized
+  `/{command} 不接受附件，请先移除附件` notice, and the host executor enforces
+  the same rule. `/omd-ulw`, `/omd-plan`, `/omd-hyperplan`, `/omd-team`,
+  `/omd-start-work`, `/omd-ulw-execute`, `/omd-refactor`, `/omd-init-deep`,
+  and `/omd-remove-ai-slops` now declare acceptance and forward the admitted
+  `ImageBlock`/`FileBlock` values ahead of the instruction text in the
+  follow-up message (`src/core/message.js`, `src/commands/index.js`).
+  `/omd-init-deep` and `/omd-remove-ai-slops` also accept an optional
+  context/scope argument. Report commands keep the refusal on purpose: they
+  never submit a model message, so admitting an attachment would drop it.
+
 ## 0.1.7 — 2026-11-28
 
 ### Fixed

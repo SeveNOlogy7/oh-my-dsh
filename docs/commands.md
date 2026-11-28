@@ -18,9 +18,9 @@ harness's own `/goal` stays available.
 | `/omd-ulw-execute` | `[plan]` | The same execution entry point under the name the execute skill advertises; also sets ultrawork mode. |
 | `/omd-stop-continuation` | — | Clears the mode, pauses the boulder, pauses an active DSH goal. |
 | `/omd-handoff` | — | Writes `.omd/handoff/<timestamp>.md` with state, git status, recent transcript, and next action. |
-| `/omd-init-deep` | — | Sends the hierarchical `AGENTS.md` protocol. |
+| `/omd-init-deep` | `[context]` | Sends the hierarchical `AGENTS.md` protocol; optional context text is appended. |
 | `/omd-refactor` | `<target>` | Sends the behavior-preserving refactor protocol. |
-| `/omd-remove-ai-slops` | — | Sends the comment/noise cleanup protocol. |
+| `/omd-remove-ai-slops` | `[scope]` | Sends the comment/noise cleanup protocol; optional scope text is appended. |
 
 Commands that start work use `agent.followup()` with a complete user-role
 message — `{id, role: 'user', content, source}`. DSH persists that object
@@ -32,8 +32,27 @@ builds these messages in `src/core/message.js`.
 Their UI result is a receipt; the model receives the protocol through the
 message and the active mode's system-prompt section.
 
+## Attachments
+
+Every command that hands the agent a message also accepts image and file
+attachments: `/omd-ulw`, `/omd-plan`, `/omd-hyperplan`, `/omd-team`,
+`/omd-start-work`, `/omd-ulw-execute`, `/omd-refactor`, `/omd-init-deep`, and
+`/omd-remove-ai-slops` declare `input.attachments`, receive the durable
+`ImageBlock`/`FileBlock` values the command executor admitted, and place them
+ahead of the instruction text — the order `dsh-plan-mode` uses. `/omd-ulw` and
+`/omd-refactor` stay useless without their goal or target: an attachment-only
+invocation of those two answers with the usage error and DSH keeps the
+attachment in the composer. `/omd-start-work` and `/omd-ulw-execute` answer
+with their no-plan failure when `.omd/plans` holds no usable plan; that failure
+submits no message either, so the attachment stays in the composer as well.
+`/omd-plan`, `/omd-hyperplan` and `/omd-team` fall back to their standing
+instruction and accept an attachment-only invocation.
+
 The report commands (`/omd-init`, `/omd-status`, `/omd-config`,
-`/omd-handoff`, `/omd-stop-continuation`) do **not** submit a message. A
+`/omd-handoff`, `/omd-stop-continuation`) do **not** submit a message, so they
+do not declare attachment acceptance: accepting it would silently drop it. The
+composer refuses those invocations with the localized
+`/{command} 不接受附件，请先移除附件` notice and leaves the attachment in place. A
 command result stays in the UI command plane, and the bundle's Client half
 (`client.js`) registers one `conversation.chat.commandview` cell per OMD command
 that renders the returned text in full. The output is readable the moment the

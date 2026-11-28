@@ -111,6 +111,12 @@ one.
 `/omd-start-work`, `/omd-ulw-execute`, `/omd-stop-continuation`,
 `/omd-handoff`, `/omd-init-deep`, `/omd-refactor`, `/omd-remove-ai-slops`.
 
+Commands that wake the agent — `/omd-ulw`, `/omd-plan`, `/omd-hyperplan`,
+`/omd-team`, `/omd-start-work`, `/omd-ulw-execute`, `/omd-refactor`,
+`/omd-init-deep`, and `/omd-remove-ai-slops` — accept image and file
+attachments and forward them with the instruction. Report commands do not take
+attachments, because they never submit a model message.
+
 `/goal` is provided by DeepSeek Harness itself.
 
 The doctor is a skill rather than a command: every OMD role carries

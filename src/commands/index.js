@@ -26,9 +26,13 @@ function failure(text) {
   return { kind: 'error', text }
 }
 
-function followup(agent, text) {
+// Attachments are model-facing blocks the command executor admitted for this
+// invocation (the Host admits them only when the command declares
+// `input.attachments`). Forward them ahead of the instruction text, the same
+// order `dsh-plan-mode` and `dsh-command-goal` use.
+function followup(agent, text, attachments = []) {
   if (!agent?.followup) throw new Error('agent followup is unavailable in this composition')
-  agent.followup(userMessage(text))
+  agent.followup(userMessage(text, { kind: 'user' }, attachments))
 }
 
 /**
@@ -132,15 +136,15 @@ export function createCommands(runtime) {
   add({
     name: 'omd-ulw',
     description: t('command.omd-ulw.description', 'Enter ultrawork mode and pursue the goal until verified.'),
-    input: { hint: '<goal>' },
-    handler: async ({ agent, rawInput }) => {
+    input: { hint: '<goal>', attachments: true },
+    handler: async ({ agent, rawInput, attachments = [] }) => {
       const goal = inputText(rawInput)
       if (!goal) return failure('usage: /omd-ulw <goal>')
       const state = await runtime.stateFor(agent)
       await ensureOmd(state.cwd)
       await runtime.setMode(agent, 'ultrawork', { runId: `ulw-${Date.now().toString(36)}` })
       await appendLedger(state.cwd, { event: 'mode-set', mode: 'ultrawork', agent: agent.id })
-      followup(agent, `[ultrawork] ${goal}`)
+      followup(agent, `[ultrawork] ${goal}`, attachments)
       return success('ultrawork mode active. The operating protocol is in the system prompt; work until the goal is verified.')
     },
   })
@@ -148,14 +152,14 @@ export function createCommands(runtime) {
   add({
     name: 'omd-plan',
     description: t('command.omd-plan.description', 'Enter interview planning mode and produce an approved plan.'),
-    input: { hint: '<goal>' },
-    handler: async ({ agent, rawInput }) => {
+    input: { hint: '<goal>', attachments: true },
+    handler: async ({ agent, rawInput, attachments = [] }) => {
       const goal = inputText(rawInput)
       const state = await runtime.stateFor(agent)
       await ensureOmd(state.cwd)
       await runtime.setMode(agent, 'plan')
       await appendLedger(state.cwd, { event: 'mode-set', mode: 'plan', agent: agent.id })
-      followup(agent, `[plan] ${goal || 'Plan the work I just described.'}`)
+      followup(agent, `[plan] ${goal || 'Plan the work I just described.'}`, attachments)
       return success('planning mode active. Interview only owner decisions, then write .omd/plans/<slug>.md after approval.')
     },
   })
@@ -163,28 +167,29 @@ export function createCommands(runtime) {
   add({
     name: 'omd-hyperplan',
     description: t('command.omd-hyperplan.description', 'Run five adversarial planning lanes and produce a stronger plan.'),
-    input: { hint: '<goal>' },
-    handler: async ({ agent, rawInput }) => {
+    input: { hint: '<goal>', attachments: true },
+    handler: async ({ agent, rawInput, attachments = [] }) => {
       const goal = inputText(rawInput)
       const state = await runtime.stateFor(agent)
       await ensureOmd(state.cwd)
       await runtime.setMode(agent, 'hyperplan')
       await appendLedger(state.cwd, { event: 'mode-set', mode: 'hyperplan', agent: agent.id })
-      followup(agent, `[hyperplan] ${goal || 'Harden the current plan.'}`)
-      return success('hyperplan mode active. Five review lanes run before any implementation.')    },
+      followup(agent, `[hyperplan] ${goal || 'Harden the current plan.'}`, attachments)
+      return success('hyperplan mode active. Five review lanes run before any implementation.')
+    },
   })
 
   add({
     name: 'omd-team',
     description: t('command.omd-team.description', 'Run a lead + parallel team over the DSH Agent Teams board.'),
-    input: { hint: '<goal>' },
-    handler: async ({ agent, rawInput }) => {
+    input: { hint: '<goal>', attachments: true },
+    handler: async ({ agent, rawInput, attachments = [] }) => {
       const goal = inputText(rawInput)
       const state = await runtime.stateFor(agent)
       await ensureOmd(state.cwd)
       await runtime.setMode(agent, 'team')
       await appendLedger(state.cwd, { event: 'mode-set', mode: 'team', agent: agent.id })
-      followup(agent, `[team] ${goal || 'Run the current work as a parallel team.'}`)
+      followup(agent, `[team] ${goal || 'Run the current work as a parallel team.'}`, attachments)
       return success(
         'team mode active. The lead uses the host Agent Teams board when available and verifies each result.',
       )
@@ -203,7 +208,7 @@ export function createCommands(runtime) {
   // told to plan while the user asked for code, and the turn is nudged for the
   // wrong deliverable. The mode transition therefore belongs to the command that
   // starts the work, not to the user remembering to switch first.
-  const startWork = async ({ agent, rawInput }) => {
+  const startWork = async ({ agent, rawInput, attachments = [] }) => {
     const state = await runtime.stateFor(agent)
     await ensureOmd(state.cwd)
     const requested = inputText(rawInput)
@@ -240,6 +245,7 @@ export function createCommands(runtime) {
     followup(
       agent,
       `${protocol}\n\n---\nActive plan: ${plan.source}\nTitle: ${plan.title}\nProgress: ${plan.checked}/${plan.total}\nNext task: ${next ? `${next.id}. ${next.title}` : 'none (final verification)'}\n`,
+      attachments,
     )
     return success(
       `execution started in ultrawork: ${plan.title} (${plan.checked}/${plan.total})\nplan: ${plan.source}\nnext: ${next ? `${next.id}. ${next.title}` : 'final verification'}`,
@@ -252,7 +258,7 @@ export function createCommands(runtime) {
       'command.omd-start-work.description',
       'Start or resume execution of an approved plan with the Atlas protocol.',
     ),
-    input: { hint: '[plan]' },
+    input: { hint: '[plan]', attachments: true },
     handler: startWork,
   })
 
@@ -262,7 +268,7 @@ export function createCommands(runtime) {
       'command.omd-ulw-execute.description',
       'Execute the approved plan in ultrawork mode with dual evidence.',
     ),
-    input: { hint: '[plan]' },
+    input: { hint: '[plan]', attachments: true },
     handler: startWork,
   })
 
@@ -382,10 +388,16 @@ export function createCommands(runtime) {
   add({
     name: 'omd-init-deep',
     description: t('command.omd-init-deep.description', 'Generate a hierarchical AGENTS.md context tree.'),
-    handler: async ({ agent }) => {
+    input: { hint: '[context]', attachments: true },
+    handler: async ({ agent, rawInput, attachments = [] }) => {
       const state = await runtime.stateFor(agent)
+      const context = inputText(rawInput)
       const protocol = await loadProtocol('init-deep')
-      followup(agent, `${protocol}\n\nTarget workspace: ${state.cwd}`)
+      followup(
+        agent,
+        `${protocol}\n\nTarget workspace: ${state.cwd}${context ? `\nContext: ${context}` : ''}`,
+        attachments,
+      )
       return success('init-deep protocol sent. Write only AGENTS.md files that carry durable, local context.')
     },
   })
@@ -393,12 +405,12 @@ export function createCommands(runtime) {
   add({
     name: 'omd-refactor',
     description: t('command.omd-refactor.description', 'Refactor a target with behavior-preserving verification.'),
-    input: { hint: '<target>' },
-    handler: async ({ agent, rawInput }) => {
+    input: { hint: '<target>', attachments: true },
+    handler: async ({ agent, rawInput, attachments = [] }) => {
       const target = inputText(rawInput)
       if (!target) return failure('usage: /omd-refactor <target>')
       const protocol = await loadProtocol('refactor')
-      followup(agent, `${protocol}\n\nTarget: ${target}`)
+      followup(agent, `${protocol}\n\nTarget: ${target}`, attachments)
       return success('refactor protocol sent.')
     },
   })
@@ -406,9 +418,11 @@ export function createCommands(runtime) {
   add({
     name: 'omd-remove-ai-slops',
     description: t('command.omd-remove-ai-slops.description', 'Remove low-value generated comments and dead noise.'),
-    handler: async ({ agent }) => {
+    input: { hint: '[scope]', attachments: true },
+    handler: async ({ agent, rawInput, attachments = [] }) => {
+      const scope = inputText(rawInput)
       const protocol = await loadProtocol('remove-ai-slops')
-      followup(agent, protocol)
+      followup(agent, `${protocol}${scope ? `\n\nScope: ${scope}` : ''}`, attachments)
       return success('AI-slop cleanup protocol sent.')
     },
   })

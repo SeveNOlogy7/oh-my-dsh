@@ -99,6 +99,11 @@ preset。
 `/omd-start-work`、`/omd-stop-continuation`、`/omd-handoff`、
 `/omd-init-deep`、`/omd-refactor`、`/omd-remove-ai-slops`。
 
+会唤醒模型的命令——`/omd-ulw`、`/omd-plan`、`/omd-hyperplan`、`/omd-team`、
+`/omd-start-work`、`/omd-ulw-execute`、`/omd-refactor`、`/omd-init-deep`、
+`/omd-remove-ai-slops`——支持图片与文件附件，附件会随指令一起转发给模型。报告类命令
+不接受附件，因为它们从不提交模型消息。
+
 `/goal` 使用 DeepSeek Harness 原生能力。
 
 doctor 做成**技能**而不是指令：每个 OMD 角色都带 `omd-doctor` 技能，它驱动
