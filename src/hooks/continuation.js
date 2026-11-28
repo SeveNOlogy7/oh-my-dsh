@@ -38,7 +38,7 @@ export const MAX_IDLE_ROUNDS = 2
  */
 export function continuationDecision(
   state,
-  { plan = null, tasks = null, tracked = null, dualEvidence = true, idleRounds = 0 } = {},
+  { plan = null, tasks = null, tracked = null, executing = false, dualEvidence = true, idleRounds = 0 } = {},
 ) {
   const mode = state?.mode?.mode ?? null
   const hasPlan = Boolean(plan && plan.total > 0)
@@ -49,7 +49,13 @@ export function continuationDecision(
   // An explicit stop outranks every other rule: the owner said this plan does
   // not run now, and a deferred plan used to be nudged open for as many rounds
   // as the cap allowed.
-  if (planDeferred(plan)) return { steer: false, reason: 'plan-deferred' }
+  //
+  // The exception is a boulder that names the plan: `/omd-start-work` and
+  // `/omd-ulw-execute` write one when the owner starts the work, and that
+  // instruction is newer than the marker in the file. Without the exception a
+  // plan marked `execution: deferred` could be restarted and then never nudged
+  // again, so an execution mode would silently stop supervising it.
+  if (planDeferred(plan) && !executing) return { steer: false, reason: 'plan-deferred' }
 
   let decision
   if (PLANNING_MODES.has(mode)) {

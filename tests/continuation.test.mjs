@@ -206,3 +206,12 @@ test('a tool call resets the stall counter', async () => {
   assert.equal(env.state.steers.length, 3, 'progress reopens the turn instead of ending the loop')
   env.dispose()
 })
+
+test('a boulder that names the plan outranks the deferred marker', () => {
+  const deferred = doc({ status: 'approved', execution: 'deferred — owner stopped after planning' })
+  const ultrawork = idleState('ultrawork')
+  assert.deepEqual(continuationDecision(ultrawork, { plan: deferred }), { steer: false, reason: 'plan-deferred' })
+  const started = continuationDecision(ultrawork, { plan: deferred, executing: true })
+  assert.equal(started.steer, true, 'starting the plan is a newer instruction than the marker in the file')
+  assert.equal(started.gate, 'open-work')
+})

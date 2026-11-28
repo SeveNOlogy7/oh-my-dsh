@@ -89,9 +89,12 @@ async function currentPlan(state) {
   const slot = await readBoulderSlot(state.cwd, state.stem)
   if (slot.ok && slot.value?.active_plan) {
     const named = await readPlan(state.cwd, slot.value.active_plan)
-    if (named) return named
+    // A boulder names the plan this session is running: the owner started the
+    // work explicitly, so the plan file's own "deferred" marker no longer
+    // describes it (see `continuationDecision`).
+    if (named) return { plan: named, executing: true }
   }
-  return planSince(state.cwd, state.mode?.since)
+  return { plan: await planSince(state.cwd, state.mode?.since), executing: false }
 }
 
 /**
@@ -509,7 +512,7 @@ export async function installAgentHooks(runtime, agent, state) {
             // goal service optional
           }
           if (typeof agent.steer !== 'function') return
-          const plan = await currentPlan(state)
+          const { plan, executing } = await currentPlan(state)
           let taskSummary = null
           try {
             const summary = await new TaskStore(state.cwd).summary()
@@ -530,6 +533,7 @@ export async function installAgentHooks(runtime, agent, state) {
             plan,
             tasks: taskSummary,
             tracked: evidence(),
+            executing,
             dualEvidence: state.config.ultrawork.dualEvidence,
             idleRounds,
           })
