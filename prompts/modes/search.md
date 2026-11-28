@@ -7,3 +7,5 @@ Search-only mode. Find and report; do not change the repository.
 - Separate what you found from what you inferred.
 - Do not edit files, install dependencies, or run mutating commands.
 - If the answer is not present, say where you looked and what pattern you used.
+
+<!-- include: read-progress -->

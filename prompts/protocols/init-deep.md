@@ -34,3 +34,5 @@ generated content.
 ## Record
 
 Append a ledger event and report the created paths.
+
+<!-- include: visible-progress -->

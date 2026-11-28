@@ -32,3 +32,5 @@ Refactor with behavior preservation first.
 
 Return a DoneClaim with commands, changed files, evidence, and any follow-up
 that was deliberately left out.
+
+<!-- include: visible-progress -->

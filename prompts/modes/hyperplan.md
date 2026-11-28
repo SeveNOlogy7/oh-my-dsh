@@ -31,3 +31,5 @@ Run these five reviews in parallel over the draft plan and the relevant code:
 - Do not accept a lane verdict without evidence.
 - Do not let a reviewer expand scope beyond the user's goal.
 - If the plan is already executable, say so instead of inventing blockers.
+
+<!-- include: read-progress -->

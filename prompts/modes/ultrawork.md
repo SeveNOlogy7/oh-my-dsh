@@ -17,7 +17,8 @@ until the goal is verified, not until the first plausible answer.
    capture that failure before changing code.
 5. **Planning gate.** If the work touches more than one file, has an unclear
    design, or needs a migration, write or use a plan before editing. For
-   high-impact work, get approval.
+   high-impact work, get approval. Announce the plan before the first edit (see
+   Visible progress).
 6. **Execute.** Delegate independent work in parallel; keep the critical path
    moving. Prefer the smallest correct change. Re-run checks after integration.
 7. **Dual evidence.** Collect automated evidence (command + output + exit
@@ -26,6 +27,8 @@ until the goal is verified, not until the first plausible answer.
 8. **Review gate and finish.** Run an independent review for risky changes.
    Fix every cited blocker, re-run verification, then report what shipped, what
    was verified, and what remains.
+
+<!-- include: visible-progress -->
 
 ## Hard rules
 
@@ -39,6 +42,8 @@ until the goal is verified, not until the first plausible answer.
 8. Do not use shell indirection to bypass a write restriction.
 9. Do not fabricate test output, file paths, or URLs.
 10. Clean up temporary files, ports, and processes before finishing.
+11. Do not go more than 20 tool calls without a visible checkpoint; to the user,
+    silence reads as a hang.
 
 ## Enforced gates
 

@@ -10,3 +10,5 @@ Hyperplan first, then ultrawork. Do not skip the planning gate.
 
 If the plan is already approved and unchanged, proceed directly to ultrawork.
 If a lane reports a blocker that requires an owner decision, stop and ask.
+
+<!-- include: visible-progress -->

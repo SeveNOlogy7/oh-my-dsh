@@ -30,3 +30,5 @@ Attach evidence and a repro. Do not reject for style or preference.
 
 Maximum two re-review rounds. If the same blocker survives two rounds, escalate
 to the user with the exact failure and options.
+
+<!-- include: read-progress -->

@@ -24,3 +24,5 @@ You are in planning mode. Produce a decision-complete plan; do not implement it.
 - Turn preferences into requirements.
 - Hand off a plan whose tasks lack scope or verification.
 - Execute the plan yourself.
+
+<!-- include: read-progress -->

@@ -34,3 +34,5 @@ back to `omd_delegate` plus the file board under `.omd/runtime/<runId>/tasks/`.
 - A member addresses peers by name with `send_message`; the Host keeps no
   mailbox file, read receipt, or payload cap to manage.
 - Stop the team if a worker fails twice on the same task; report the blocker.
+
+<!-- include: visible-progress -->

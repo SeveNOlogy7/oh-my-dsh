@@ -28,3 +28,5 @@ Remove low-value generated noise without changing behavior.
 
 Return a DoneClaim with the categories removed, the files touched, and the
 verification commands.
+
+<!-- include: visible-progress -->

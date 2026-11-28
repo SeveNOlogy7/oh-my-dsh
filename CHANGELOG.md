@@ -1,5 +1,28 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- **Every mode reports progress while it runs.** A measured ultrawork run spent
+  29 minutes and 224 tool calls after its opening line without one word of
+  assistant prose, so the transcript collapsed into a single folded tool block
+  and a working run looked exactly like a hung one. Modes that execute
+  (`ultrawork`, `hyperplan-ulw`, `team`) now define three checkpoints — a plan
+  announcement before the first deliverable edit, a 2–3 line work checkpoint at
+  least every 20 tool calls or 10 minutes, and an evidence summary before the
+  final report — plus a hard rule against long silent stretches. Read-only modes
+  (`plan`, `hyperplan`, `analyze`, `search`) carry a lighter read-progress note
+  that asks for interim findings on the same cadence, and the protocol-sent
+  commands that run without a mode (`/omd-refactor`, `/omd-remove-ai-slops`,
+  `/omd-init-deep`, review) inherit the same texts. Both are shared partials
+  (`prompts/shared/_visible-progress.md`, `prompts/shared/_read-progress.md`)
+  pulled in through `<!-- include: … -->` markers that `loadModePrompt` and
+  `loadProtocol` expand, so a prompt inherits the protocol instead of drifting
+  from a copy (`src/agents/prompts.js`, pinned by
+  `tests/mode-progress.test.mjs`, which also fails when a new mode prompt
+  declares neither shape).
+
 ## 0.1.8 — 2026-11-28
 
 ### Fixed

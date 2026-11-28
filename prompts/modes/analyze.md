@@ -8,3 +8,5 @@ Read-only analysis mode. Explain the system; do not change it.
   it.
 - Call out uncertainty and what evidence would settle it.
 - Do not edit files or run mutating commands.
+
+<!-- include: read-progress -->
