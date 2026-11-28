@@ -5,6 +5,14 @@ whenToUse: Use during /omd-start-work, ultrawork execution, or any multi-task im
 ---
 # OMD execute
 
+## Mode gate
+
+Execution runs in `ultrawork`. Check the mode before delegating anything: if
+`omd_mode` reports `plan`, `hyperplan`, `hyperplan-ulw`, or `team`, set
+`{"action":"set","mode":"ultrawork"}` first. A planning mode's system-prompt
+section forbids implementation, and its continuation gate asks for a plan rather
+than a result — executing under it leaves the session unable to close.
+
 ## Task unit
 
 Every delegated task is atomic and self-contained. Include:

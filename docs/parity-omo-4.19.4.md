@@ -257,7 +257,9 @@ of the shared set — `ast-grep`, `debugging`, `frontend`, `git-master`,
 `omd-hyperplan`, `omd-team-mode`, `omd-ulw-execute`. Five shared skills have no
 OMD counterpart: `programming`, `lsp-setup`, `coding-agent-sessions`,
 `data-scientist`, `ultimate-browsing`. `start-work` is not missing: OMD
-implements it as the `/omd-start-work` command rather than a skill.
+implements it as the `/omd-start-work` command rather than a skill, and the
+`/omd-ulw-execute` command is registered as the same handler so that typing the
+skill's name also enters ultrawork instead of only loading the skill text.
 
 Deferred domain skills from OmO's catalog: `playwright`, `playwright-cli`,
 `dev-browser`, `security-research`, `data-scientist`, `programming`,

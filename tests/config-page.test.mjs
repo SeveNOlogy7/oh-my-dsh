@@ -705,7 +705,7 @@ test('the /omd-config command serves the page: read, write, and a rejected value
   assert.match(usage.text, /usage: \/omd-config/)
 
   // Every other OMD command keeps its original shape.
-  assert.equal(createCommands(runtime).length, 13)
+  assert.equal(createCommands(runtime).length, 14)
   assert.deepEqual(
     createCommands(runtime).filter((command) => command.name === 'omd-config').map((command) => Object.keys(command).sort()),
     [['description', 'handler', 'input', 'name']],

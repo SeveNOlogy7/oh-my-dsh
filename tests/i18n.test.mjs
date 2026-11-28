@@ -51,7 +51,7 @@ test('language: zh localizes every tool, command, and skill description', async 
       assert.equal(tool.description, MESSAGES.zh[`tool.${tool.name}.description`])
     }
 
-    assert.equal(env.state.commands.length, 13, 'every sisyphus OMD command registers')
+    assert.equal(env.state.commands.length, 14, 'every sisyphus OMD command registers')
     for (const command of env.state.commands) {
       assert.match(command.description, CJK, `${command.name} description must be Chinese`)
       assert.equal(command.description, MESSAGES.zh[`command.${command.name}.description`])
@@ -146,7 +146,7 @@ test('both catalogs cover exactly the registered description surface', async () 
         `skill.${skill.name}.whenToUse`,
       ]),
     ]
-    assert.equal(keys.length, 19 + 13 + SKILL_NAMES.length * 2)
+    assert.equal(keys.length, 19 + 14 + SKILL_NAMES.length * 2)
     assert.equal(new Set(keys).size, keys.length, 'no key is registered twice')
     for (const key of keys) {
       for (const language of LANGUAGES) {

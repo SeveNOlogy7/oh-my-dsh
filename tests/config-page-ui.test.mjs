@@ -103,7 +103,7 @@ test('the module keeps its command cells and registers the settings section', ()
   assert.deepEqual(harness.clientModule.inject, ['slots', 'locale', 'sessions'])
 
   const cells = harness.registered.filter((handle) => handle.options.name === 'conversation.chat.commandview')
-  assert.equal(cells.length, 13, 'every OMD command keeps its own cell')
+  assert.equal(cells.length, 14, 'every OMD command keeps its own cell')
   assert.ok(cells.some((handle) => handle.options.key === 'omd-config'))
 
   const section = harness.section

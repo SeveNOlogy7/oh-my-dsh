@@ -108,8 +108,8 @@ one.
 
 `/omd-init`, `/omd-status`, `/omd-config`,
 `/omd-ulw`, `/omd-plan`, `/omd-hyperplan`, `/omd-team`,
-`/omd-start-work`, `/omd-stop-continuation`, `/omd-handoff`,
-`/omd-init-deep`, `/omd-refactor`, `/omd-remove-ai-slops`.
+`/omd-start-work`, `/omd-ulw-execute`, `/omd-stop-continuation`,
+`/omd-handoff`, `/omd-init-deep`, `/omd-refactor`, `/omd-remove-ai-slops`.
 
 `/goal` is provided by DeepSeek Harness itself.
 

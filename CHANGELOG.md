@@ -1,5 +1,23 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- **Starting execution enters ultrawork.** `/omd-ulw-execute` was a skill name,
+  not a command, so typing it in a session that was already in `hyperplan` only
+  loaded the skill text: the mode stayed `hyperplan`, its system-prompt section
+  ("do not execute the plan") stayed installed, and the planning continuation
+  gate kept asking for a plan while the user asked for code (session
+  `c943560a`, round 18). `/omd-start-work` had the same hole from the other
+  side — it wrote the boulder and sent the Atlas protocol without entering any
+  mode, so a session that started work from `plan` ran ungoverned: no
+  continuation, no dual-evidence gate. Both names now share one handler, are
+  registered as commands (`src/commands/index.js`, `src/commands/names.js`,
+  `ui/client.js`, both locales), and set `ultrawork` before handing over the
+  protocol. The execute skill also gained a `## Mode gate` section for the path
+  where DSH resolves the skill before the command.
+
 ## 0.1.6 — 2026-11-28
 
 ### Fixed

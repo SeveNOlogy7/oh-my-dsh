@@ -191,6 +191,61 @@ export function createCommands(runtime) {
     },
   })
 
+  // Execution is one behaviour under two names. `/omd-start-work` is the
+  // Atlas-protocol name the parity table documents; `/omd-ulw-execute` is the
+  // name the bundled execute skill advertises, and DSH resolves a typed
+  // `/omd-ulw-execute` to that skill, which only text-loads and changed nothing.
+  // Both names now run the plan.
+  //
+  // Both also enter ultrawork. Executing for real is implementation work, and a
+  // session left in `hyperplan` carries that mode's system-prompt section ("do
+  // not execute the plan") plus a planning-only continuation gate: the model is
+  // told to plan while the user asked for code, and the turn is nudged for the
+  // wrong deliverable. The mode transition therefore belongs to the command that
+  // starts the work, not to the user remembering to switch first.
+  const startWork = async ({ agent, rawInput }) => {
+    const state = await runtime.stateFor(agent)
+    await ensureOmd(state.cwd)
+    const requested = inputText(rawInput)
+    let plan = null
+    if (requested) plan = await readPlan(state.cwd, requested)
+    if (!plan) {
+      const slot = await readBoulderSlot(state.cwd, state.stem)
+      if (slot.ok && slot.value.active_plan) {
+        plan = await readPlan(state.cwd, slot.value.active_plan)
+      }
+    }
+    if (!plan) plan = await latestPlan(state.cwd, { status: 'approved' })
+    if (!plan) plan = await latestPlan(state.cwd)
+    if (!plan) {
+      return failure('no plan found in .omd/plans. Run /omd-plan first, then /omd-start-work.')
+    }
+    await createBoulder({
+      workspace: state.cwd,
+      stem: state.stem,
+      sessionId: agent.id,
+      planPath: plan.source,
+      planName: plan.title,
+    })
+    await runtime.setMode(agent, 'ultrawork', { runId: `ulw-${Date.now().toString(36)}` })
+    const protocol = await loadProtocol('start-work')
+    const next = plan.open[0]
+    await appendLedger(state.cwd, {
+      event: 'start-work',
+      plan: plan.source,
+      task: next?.id ?? null,
+      agent: agent.id,
+    })
+    await appendLedger(state.cwd, { event: 'mode-set', mode: 'ultrawork', agent: agent.id })
+    followup(
+      agent,
+      `${protocol}\n\n---\nActive plan: ${plan.source}\nTitle: ${plan.title}\nProgress: ${plan.checked}/${plan.total}\nNext task: ${next ? `${next.id}. ${next.title}` : 'none (final verification)'}\n`,
+    )
+    return success(
+      `execution started in ultrawork: ${plan.title} (${plan.checked}/${plan.total})\nplan: ${plan.source}\nnext: ${next ? `${next.id}. ${next.title}` : 'final verification'}`,
+    )
+  }
+
   add({
     name: 'omd-start-work',
     description: t(
@@ -198,46 +253,17 @@ export function createCommands(runtime) {
       'Start or resume execution of an approved plan with the Atlas protocol.',
     ),
     input: { hint: '[plan]' },
-    handler: async ({ agent, rawInput }) => {
-      const state = await runtime.stateFor(agent)
-      await ensureOmd(state.cwd)
-      const requested = inputText(rawInput)
-      let plan = null
-      if (requested) plan = await readPlan(state.cwd, requested)
-      if (!plan) {
-        const slot = await readBoulderSlot(state.cwd, state.stem)
-        if (slot.ok && slot.value.active_plan) {
-          plan = await readPlan(state.cwd, slot.value.active_plan)
-        }
-      }
-      if (!plan) plan = await latestPlan(state.cwd, { status: 'approved' })
-      if (!plan) plan = await latestPlan(state.cwd)
-      if (!plan) {
-        return failure('no plan found in .omd/plans. Run /omd-plan first, then /omd-start-work.')
-      }
-      await createBoulder({
-        workspace: state.cwd,
-        stem: state.stem,
-        sessionId: agent.id,
-        planPath: plan.source,
-        planName: plan.title,
-      })
-      const protocol = await loadProtocol('start-work')
-      const next = plan.open[0]
-      await appendLedger(state.cwd, {
-        event: 'start-work',
-        plan: plan.source,
-        task: next?.id ?? null,
-        agent: agent.id,
-      })
-      followup(
-        agent,
-        `${protocol}\n\n---\nActive plan: ${plan.source}\nTitle: ${plan.title}\nProgress: ${plan.checked}/${plan.total}\nNext task: ${next ? `${next.id}. ${next.title}` : 'none (final verification)'}\n`,
-      )
-      return success(
-        `execution started: ${plan.title} (${plan.checked}/${plan.total})\nplan: ${plan.source}\nnext: ${next ? `${next.id}. ${next.title}` : 'final verification'}`,
-      )
-    },
+    handler: startWork,
+  })
+
+  add({
+    name: 'omd-ulw-execute',
+    description: t(
+      'command.omd-ulw-execute.description',
+      'Execute the approved plan in ultrawork mode with dual evidence.',
+    ),
+    input: { hint: '[plan]' },
+    handler: startWork,
   })
 
   add({

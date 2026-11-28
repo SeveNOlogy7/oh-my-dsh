@@ -63,6 +63,8 @@ export const MESSAGES = {
     'command.omd-team.description': 'Run a lead + parallel team over the DSH Agent Teams board.',
     'command.omd-start-work.description':
       'Start or resume execution of an approved plan with the Atlas protocol.',
+    'command.omd-ulw-execute.description':
+      'Execute the approved plan in ultrawork mode with dual evidence.',
     'command.omd-stop-continuation.description':
       'Stop OMD continuations, pause the boulder, and pause an active goal.',
     'command.omd-handoff.description': 'Write a continuation handoff document for a new session.',
@@ -154,6 +156,7 @@ export const MESSAGES = {
     'command.omd-hyperplan.description': '运行五路对抗式规划，产出更稳健的计划。',
     'command.omd-team.description': '以 DSH Agent Teams 任务板运行「主控 + 并行团队」。',
     'command.omd-start-work.description': '按 Atlas 协议开始或继续执行已确认的计划。',
+    'command.omd-ulw-execute.description': '在 ultrawork 模式下执行已确认的计划，并保留双重证据。',
     'command.omd-stop-continuation.description': '停止 OMD 续跑，暂停 boulder，并暂停进行中的 goal。',
     'command.omd-handoff.description': '为新会话撰写续接用的交接文档。',
     'command.omd-init-deep.description': '生成分层级的 AGENTS.md 上下文树。',
