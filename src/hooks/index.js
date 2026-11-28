@@ -24,6 +24,14 @@ import {
 
 const CONTINUABLE_MODES = new Set(['ultrawork', 'team', 'hyperplan', 'hyperplan-ulw'])
 
+/**
+ * Every tool name that runs a shell command. The verification tally below has to
+ * recognise all of them, or the baseline gate can never be satisfied on a host
+ * that names its shell tool something other than `bash` (DSH ships the
+ * namespaced `ops_bash` / `ops_pwsh` tools).
+ */
+const SHELL_TOOL_NAMES = new Set(['pwsh', 'bash', 'shell', 'sh', 'zsh', 'ops_bash', 'ops_pwsh'])
+
 /** A DSH model selection object for one resolved chain step. */
 function selectionFor(step) {
   const selection = { provider: step.provider, model: step.model }
@@ -558,7 +566,7 @@ export async function installAgentHooks(runtime, agent, state) {
           // it counts only calls that reached execution (a guard refusal never
           // gets here).
           const tracked = evidence()
-          if (['pwsh', 'bash', 'shell'].includes(exec.name)) {
+          if (SHELL_TOOL_NAMES.has(exec.name)) {
             const command = exec.arguments?.command
             if (isVerificationCommand(command)) {
               tracked.baseline += 1

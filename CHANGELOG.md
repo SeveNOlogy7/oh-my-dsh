@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- **The verification tally recognises the host's shell tool names.** The
+  baseline and dual-evidence gates counted a verification command only when the
+  tool was called `pwsh`, `bash`, or `shell`, while DSH also ships the namespaced
+  `ops_bash` and `ops_pwsh`; on such a host a passing verification never counted,
+  so the gates could not be satisfied. `src/hooks/index.js` now matches every
+  shell name it knows (`sh`, `zsh` included) through one `SHELL_TOOL_NAMES` set.
+
 ## 0.1.5 — 2026-11-25
 
 ### Added

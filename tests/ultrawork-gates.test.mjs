@@ -178,6 +178,19 @@ test('a failing baseline still counts: the point is to know the starting state',
   env.dispose()
 })
 
+test('a namespaced shell tool counts as a verification run', async () => {
+  // DSH names its shell tools `ops_bash` / `ops_pwsh`, so a tally that only
+  // knows `pwsh`/`bash`/`shell` can never see a verification pass there.
+  for (const name of ['ops_bash', 'ops_pwsh', 'zsh']) {
+    const env = await setup({ config: { ultrawork: { requirePlanGate: false } } })
+    await setUltrawork(env)
+    assert.match(guard(env, 'src/a.js'), /baseline gate/)
+    await post(env, { name, arguments: { command: 'npm test' } }, textResult('ok'))
+    assert.equal(guard(env, 'src/a.js'), undefined, `${name} satisfies the baseline gate`)
+    env.dispose()
+  }
+})
+
 // Dual evidence
 
 test('dual evidence keeps the turn open until a successful verification is recorded', async () => {
